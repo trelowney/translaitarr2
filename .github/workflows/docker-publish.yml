@@ -15,6 +15,12 @@ on:
 env:
   IMAGE_NAME: ${{ github.repository }}   # e.g. yourname/translaitarr2
 
+# Only one build per ref at a time — a newer push cancels the older in-flight
+# build (saves CI minutes and avoids concurrent cache-key races).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
