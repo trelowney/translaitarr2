@@ -52,7 +52,7 @@ except OSError:
     app.secret_key = secrets.token_hex(32)
 
 # Endpoints reachable without an active config / login.
-PUBLIC_ENDPOINTS = {"health", "static", "login", "setup", "setup_submit", "arr_test"}
+PUBLIC_ENDPOINTS = {"health", "static", "login", "setup", "setup_submit"}
 
 
 @app.before_request
@@ -63,9 +63,16 @@ def gate():
 
     cfg = cfgmod.load_config()
     if not cfg.get("onboarding_completed"):
+        # First-run: the wizard's connectivity test is the only extra endpoint
+        # reachable before a config (and thus auth) exists.
+        if endpoint == "arr_test":
+            return None
         return redirect(url_for("setup"))
 
     if cfg.get("auth", {}).get("enabled") and not session.get("authed"):
+        # arr_test is fetched via JS — answer with JSON 401 instead of a redirect.
+        if endpoint == "arr_test":
+            return jsonify({"ok": False, "message": "Authentication required"}), 401
         return redirect(url_for("login"))
     return None
 

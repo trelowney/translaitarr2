@@ -17,7 +17,10 @@ A returned title is a plain dict:
 Note: ``path`` is whatever Sonarr/Radarr report. If translAItarr2 mounts the
 media at a different location, a path remap is applied later by the scanner.
 """
+import ipaddress
 import logging
+import socket
+from urllib.parse import urlparse
 
 import requests
 
@@ -28,6 +31,31 @@ DEFAULT_TIMEOUT = 15
 
 class ArrError(Exception):
     """Raised on any connection/authentication/response problem."""
+
+
+def _validate_target(base):
+    """SSRF guard for a user-supplied *arr URL.
+
+    Sonarr/Radarr legitimately live on private/loopback addresses, so those are
+    allowed — that's the whole point. We only reject what an *arr never is and
+    what is actually dangerous: non-HTTP schemes, and link-local / cloud-metadata
+    / unspecified addresses (e.g. 169.254.169.254). Redirects are disabled at the
+    request level so a target cannot bounce us onto such an address.
+    """
+    parsed = urlparse(base)
+    if parsed.scheme not in ("http", "https"):
+        raise ArrError(f"unsupported URL scheme: {parsed.scheme or '(none)'}")
+    host = parsed.hostname
+    if not host:
+        raise ArrError("invalid URL: missing host")
+    try:
+        infos = socket.getaddrinfo(host, parsed.port or None, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        return  # unresolvable — let the actual request surface a clean error
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if ip.is_link_local or ip.is_unspecified:
+            raise ArrError("refusing to connect to a link-local/metadata address")
 
 
 class _ArrClient:
@@ -45,12 +73,14 @@ class _ArrClient:
     def _get(self, path, params=None):
         if not self.configured:
             raise ArrError(f"{self.kind} is not configured (missing URL or API key)")
+        _validate_target(self.base)
         url = f"{self.base}/api/v3/{path.lstrip('/')}"
         try:
             r = requests.get(
                 url, params=params,
                 headers={"X-Api-Key": self.api_key},
                 timeout=self.timeout,
+                allow_redirects=False,
             )
         except requests.RequestException as e:
             raise ArrError(f"{self.kind}: cannot reach {self.base} ({e})") from e
