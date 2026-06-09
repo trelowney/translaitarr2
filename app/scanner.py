@@ -69,6 +69,15 @@ def _status_for(path, cfg, conn, force=False):
     return {"path": path, "mtime": mtime, **info}
 
 
+def invalidate(path):
+    """Drop a file's cached status so the next scan re-inspects it (e.g. after a
+    translation writes a new sidecar)."""
+    conn = _db()
+    conn.execute("DELETE FROM scan_cache WHERE path=?", (path,))
+    conn.commit()
+    conn.close()
+
+
 def scan(cfg=None, force=False):
     """Return (rows, errors). Each row = an *arr title plus its local path and
     subtitle status. Uses cached status unless ``force`` is set.

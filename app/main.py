@@ -17,7 +17,9 @@ from flask import (
 
 import arr
 import config as cfgmod
+import db
 import scanner
+import worker
 
 # ── Logging (stdout for `docker logs` + a file in the config volume) ──────────
 logging.basicConfig(
@@ -171,9 +173,69 @@ def arr_test():
     return jsonify({"ok": ok, "message": message})
 
 
+_STATUS_CHIP = {"pending": "amber", "processing": "blue", "done": "green",
+                "error": "red", "skipped": "gray"}
+
+
+def _log_tail(n=80):
+    try:
+        with open(cfgmod.LOG_FILE, encoding="utf-8", errors="replace") as f:
+            return "".join(f.readlines()[-n:]) or "No activity yet."
+    except OSError:
+        return "No activity yet."
+
+
 @app.route("/queue")
 def queue():
-    return render_template("queue.html", jobs=[], active="queue")
+    cfg = cfgmod.load_config()
+    jobs = []
+    for j in db.list_jobs():
+        result = j.get("result") or ""
+        # A 'done' job that was skipped reads as e.g. "skipped:embedded".
+        status = "skipped" if result.startswith("skipped") else j["status"]
+        jobs.append({
+            "id": j["id"],
+            "title": j["title"] or j["file_path"],
+            "status": status,
+            "chip": _STATUS_CHIP.get(status, "gray"),
+            "detail": j.get("error") or result,
+        })
+    usage = {
+        "total": db.today_total(),
+        "limit": cfg["limits"].get("max_daily_total", 120),
+        "per_model": db.today_per_model(),
+    }
+    return render_template("queue.html", jobs=jobs, usage=usage, log=_log_tail(), active="queue")
+
+
+@app.route("/translate", methods=["POST"])
+def translate():
+    path = request.form.get("path", "")
+    title = request.form.get("title", "")
+    if not path:
+        flash("No file path provided.")
+        return redirect(url_for("library"))
+    added, info = db.add_job(path, title, source="manual")
+    flash(f"Queued: {title or path}" if added else f"Already queued (job {info}).")
+    return redirect(url_for("queue"))
+
+
+@app.route("/translate-all", methods=["POST"])
+def translate_all():
+    rows, _ = scanner.scan(cfgmod.load_config())
+    n = 0
+    for r in rows:
+        if r["translatable"] and db.add_job(r["local_path"], r["title"], source="manual")[0]:
+            n += 1
+    flash(f"Queued {n} title(s) for translation.")
+    return redirect(url_for("queue"))
+
+
+@app.route("/retry/<int:job_id>", methods=["POST"])
+def retry(job_id):
+    db.retry(job_id)
+    flash(f"Job {job_id} re-queued.")
+    return redirect(url_for("queue"))
 
 
 @app.route("/settings")
@@ -243,6 +305,8 @@ if __name__ == "__main__":
     log.info("=" * 56)
     log.info("translAItarr2 starting on port %s", port)
     log.info("=" * 56)
+    db.init_db()
+    worker.start()
     try:
         from waitress import serve  # production WSGI server
         serve(app, host="0.0.0.0", port=port, threads=8)

@@ -6,7 +6,8 @@
 
 <div class="card">
   <h2>Today</h2>
-  <div id="usage" class="hint">Gemini requests today: — / —</div>
+  <div class="hint">Gemini requests today: <strong>{{ usage.total }}</strong> / {{ usage.limit }}{% if usage.per_model %}
+    &nbsp;—&nbsp; {% for m, c in usage.per_model.items() %}{{ m }}&times;{{ c }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}</div>
 </div>
 
 <div class="card" style="padding:0">
@@ -21,7 +22,7 @@
         <td>{{ j.title }}</td>
         <td><span class="chip {{ j.chip }}">{{ j.status }}</span></td>
         <td class="hint">{{ j.detail }}</td>
-        <td>{% if j.status == 'error' %}<button class="small">Retry</button>{% endif %}</td>
+        <td>{% if j.status == 'error' %}<form method="post" action="{{ url_for('retry', job_id=j.id) }}" style="display:inline"><button class="small" type="submit">Retry</button></form>{% endif %}</td>
       </tr>
       {% else %}
       <tr><td colspan="5" class="empty">Queue is empty.</td></tr>
@@ -32,6 +33,6 @@
 
 <div class="card">
   <h2>Live log</h2>
-  <div class="log" id="log">Waiting for activity…</div>
+  <div class="log" id="log">{{ log }}</div>
 </div>
 {% endblock %}
