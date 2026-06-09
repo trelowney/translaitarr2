@@ -17,6 +17,14 @@
       <input type="text" name="radarr_url" value="{{ cfg.arr.radarr.url }}" placeholder="http://radarr:7878">
       <label>Radarr API key</label>
       <input type="password" name="radarr_api_key" placeholder="from Radarr → Settings → General">
+      <div class="toolbar" style="margin-top:12px">
+        <button type="button" class="small" onclick="testArr('sonarr')">Test Sonarr</button>
+        <span id="sonarr-result" class="hint"></span>
+      </div>
+      <div class="toolbar">
+        <button type="button" class="small" onclick="testArr('radarr')">Test Radarr</button>
+        <span id="radarr-result" class="hint"></span>
+      </div>
     </div>
 
     <div class="card">
@@ -47,4 +55,23 @@
     <div class="toolbar"><span class="spacer"></span><button class="primary" type="submit">Finish setup</button></div>
   </form>
 </div>
+
+<script>
+async function testArr(svc) {
+  const url = document.querySelector('[name=' + svc + '_url]').value;
+  const key = document.querySelector('[name=' + svc + '_api_key]').value;
+  const out = document.getElementById(svc + '-result');
+  out.textContent = 'Testing…'; out.style.color = '';
+  try {
+    const r = await fetch('{{ url_for("arr_test") }}', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({service: svc, url: url, api_key: key}),
+    });
+    const d = await r.json();
+    out.textContent = (d.ok ? '✓ ' : '✗ ') + d.message;
+    out.style.color = d.ok ? 'var(--green)' : 'var(--red)';
+  } catch (e) { out.textContent = '✗ ' + e; out.style.color = 'var(--red)'; }
+}
+</script>
 {% endblock %}

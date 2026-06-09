@@ -15,6 +15,7 @@ from flask import (
     Flask, redirect, render_template, request, session, url_for, jsonify, flash,
 )
 
+import arr
 import config as cfgmod
 
 # ── Logging (stdout for `docker logs` + a file in the config volume) ──────────
@@ -50,7 +51,7 @@ except OSError:
     app.secret_key = secrets.token_hex(32)
 
 # Endpoints reachable without an active config / login.
-PUBLIC_ENDPOINTS = {"health", "static", "login", "setup", "setup_submit"}
+PUBLIC_ENDPOINTS = {"health", "static", "login", "setup", "setup_submit", "arr_test"}
 
 
 @app.before_request
@@ -140,7 +141,22 @@ def setup_submit():
 # ── Pages (placeholders until the scanner/engine are wired in) ─────────────────
 @app.route("/")
 def library():
-    return render_template("library.html", titles=[], active="library")
+    cfg = cfgmod.load_config()
+    titles, errors = arr.list_all_titles(cfg)
+    for e in errors:
+        flash(e)
+    # Subtitle status is filled in by the scanner (next milestone); show neutral for now.
+    rows = [{"title": t["title"], "kind": t["kind"], "status": "Not scanned", "chip": "gray"} for t in titles]
+    return render_template("library.html", titles=rows, active="library")
+
+
+@app.route("/api/arr/test", methods=["POST"], endpoint="arr_test")
+def arr_test():
+    data = request.get_json(silent=True) or request.form
+    service = (data.get("service") or "").lower()
+    client_cls = arr.RadarrClient if service == "radarr" else arr.SonarrClient
+    ok, message = client_cls(data.get("url", ""), data.get("api_key", "")).test()
+    return jsonify({"ok": ok, "message": message})
 
 
 @app.route("/queue")

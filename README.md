@@ -44,7 +44,7 @@ translAItarr2 handles those cases:
 ## Quick start
 
 ```bash
-git clone https://github.com/REPLACE_ME/translaitarr2.git
+git clone https://github.com/trelowney/translaitarr2.git
 cd translaitarr2
 cp docker-compose.example.yaml docker-compose.yaml
 # edit volumes (your media path) and PUID/PGID, then:
@@ -82,7 +82,7 @@ recreate translAItarr2 for you — exactly like it does for Sonarr/Radarr:
     restart: unless-stopped
 ```
 
-Pin to a specific version (e.g. `image: ghcr.io/REPLACE_ME/translaitarr2:1.2.0`)
+Pin to a specific version (e.g. `image: ghcr.io/trelowney/translaitarr2:1.2.0`)
 if you'd rather update deliberately instead of tracking `:latest`.
 
 ## Configuration

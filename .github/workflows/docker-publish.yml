@@ -14,6 +14,10 @@ on:
 
 env:
   IMAGE_NAME: ${{ github.repository }}   # e.g. yourname/translaitarr2
+  # Opt the JS-based actions into Node 24 now (they default to Node 20, which
+  # GitHub is retiring). Silences the deprecation warning until the actions ship
+  # native Node 24 releases.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   build-and-push:
