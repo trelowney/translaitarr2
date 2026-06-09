@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Setup · translaitarr2{% endblock %}
+{% block content %}
+<div class="center-wrap">
+  <div class="brand">translaitarr<span class="accent">2</span></div>
+  <p class="sub" style="text-align:center">First-run setup. You can change anything later in Settings.</p>
+
+  <form method="post" action="{{ url_for('setup_submit') }}">
+    <div class="card">
+      <div class="step-title">1 · Sonarr &amp; Radarr</div>
+      <p class="hint">Used to list your library with real titles. Leave a section blank if you don't run it.</p>
+      <label>Sonarr URL</label>
+      <input type="text" name="sonarr_url" value="{{ cfg.arr.sonarr.url }}" placeholder="http://sonarr:8989">
+      <label>Sonarr API key</label>
+      <input type="password" name="sonarr_api_key" placeholder="from Sonarr → Settings → General">
+      <label>Radarr URL</label>
+      <input type="text" name="radarr_url" value="{{ cfg.arr.radarr.url }}" placeholder="http://radarr:7878">
+      <label>Radarr API key</label>
+      <input type="password" name="radarr_api_key" placeholder="from Radarr → Settings → General">
+    </div>
+
+    <div class="card">
+      <div class="step-title">2 · Gemini</div>
+      <label>API key</label>
+      <input type="password" name="gemini_api_key" placeholder="AIza…">
+      <label>Models <span class="hint">— one per line, tried in order</span></label>
+      <textarea name="gemini_models">{{ cfg.gemini.models | join('\n') }}</textarea>
+    </div>
+
+    <div class="card">
+      <div class="step-title">3 · Languages</div>
+      <label>Source priority <span class="hint">— best first, ISO-639-2 (e.g. eng fra deu spa)</span></label>
+      <input type="text" name="source_priority" value="{{ cfg.languages.source_priority | join(' ') }}">
+      <div class="row">
+        <div><label>Target name</label><input type="text" name="target_name" value="{{ cfg.languages.target.name }}"></div>
+        <div><label>Target code</label><input type="text" name="target_code" value="{{ cfg.languages.target.code }}"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="step-title">4 · Access</div>
+      <div class="check"><input type="checkbox" name="auth_enabled" id="auth_enabled"><span>Protect the web UI with a password</span></div>
+      <label>Password <span class="hint">(only if enabled above)</span></label>
+      <input type="password" name="password" autocomplete="new-password">
+    </div>
+
+    <div class="toolbar"><span class="spacer"></span><button class="primary" type="submit">Finish setup</button></div>
+  </form>
+</div>
+{% endblock %}

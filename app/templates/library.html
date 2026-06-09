@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Library · translaitarr2{% endblock %}
+{% block content %}
+<h1>Library</h1>
+<p class="sub">Downloaded titles from Sonarr &amp; Radarr and their subtitle status.</p>
+
+<div class="toolbar">
+  <select id="filter">
+    <option value="all">All titles</option>
+    <option value="missing">Missing target language</option>
+  </select>
+  <span class="spacer"></span>
+  <button class="btn">Rescan</button>
+  <button class="btn primary">Translate all missing</button>
+</div>
+
+<div class="card" style="padding:0">
+  <table>
+    <thead>
+      <tr><th>Title</th><th>Type</th><th>Status</th><th style="width:120px"></th></tr>
+    </thead>
+    <tbody>
+      {% for t in titles %}
+      <tr>
+        <td>{{ t.title }}</td>
+        <td>{{ t.kind }}</td>
+        <td><span class="chip {{ t.chip }}">{{ t.status }}</span></td>
+        <td><button class="small">Translate</button></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="empty">
+        No titles yet. Finish setup, connect Sonarr/Radarr, then run a scan.
+      </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

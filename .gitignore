@@ -1,0 +1,18 @@
+# Runtime config & secrets — NEVER commit these
+config/
+*.env
+.env
+
+# Databases, logs, caches
+*.db
+*.db-journal
+*.log
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Editor / OS noise
+.idea/
+.vscode/
+.DS_Store

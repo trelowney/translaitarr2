@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Sign in · translaitarr2{% endblock %}
+{% block content %}
+<div class="center-wrap">
+  <div class="brand">translaitarr<span class="accent">2</span></div>
+  <form method="post" action="{{ url_for('login') }}">
+    <div class="card">
+      <label>Password</label>
+      <input type="password" name="password" autofocus autocomplete="current-password">
+      <div class="toolbar" style="margin-top:16px"><span class="spacer"></span><button class="primary" type="submit">Sign in</button></div>
+    </div>
+  </form>
+</div>
+{% endblock %}

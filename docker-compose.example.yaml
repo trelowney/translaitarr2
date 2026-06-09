@@ -1,0 +1,36 @@
+# Example deployment for translaitarr2.
+#
+# translaitarr2 needs to reach your Sonarr/Radarr API and read your media files.
+# Two common setups:
+#
+#  A) Standalone (this file): point SONARR_URL/RADARR_URL at reachable addresses
+#     (e.g. http://192.168.1.10:8989) and mount your media read-write.
+#
+#  B) Alongside an existing *arr stack: drop this service into that stack's
+#     compose so it shares the Docker network, then use service names
+#     (http://sonarr:8989). See the commented "networks" block below.
+
+services:
+  translaitarr2:
+    image: ghcr.io/REPLACE_ME/translaitarr2:latest   # or: build: .
+    container_name: translaitarr2
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Prague
+      - PORT=9878
+    volumes:
+      # Persistent config + queue DB + logs. Holds your API keys — keep it private.
+      - ./config:/config
+      # Your media library. translaitarr2 writes <video>.cs.srt next to each file.
+      - /path/to/media:/data
+    ports:
+      - 9878:9878
+    restart: unless-stopped
+
+    # --- Option B: join an existing *arr Docker network instead of publishing a port ---
+    # networks:
+    #   - arr_default
+# networks:
+#   arr_default:
+#     external: true

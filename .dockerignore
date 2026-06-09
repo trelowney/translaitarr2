@@ -1,0 +1,11 @@
+.git
+.github
+config/
+*.db
+*.log
+__pycache__/
+*.pyc
+.venv/
+*.md
+docker-compose*.yaml
+.env*

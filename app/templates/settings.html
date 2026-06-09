@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Settings · translaitarr2{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+<p class="sub">Stored in your config volume. Secrets are write-only and shown as ••••.</p>
+
+<form method="post" action="{{ url_for('settings_save') }}">
+  <div class="card">
+    <h2>Sonarr</h2>
+    <label>URL</label>
+    <input type="text" name="sonarr_url" value="{{ cfg.arr.sonarr.url }}">
+    <label>API key <span class="hint">(leave ••••/blank to keep current)</span></label>
+    <input type="password" name="sonarr_api_key" placeholder="{{ '••••••••' if cfg.arr.sonarr.api_key else '' }}">
+  </div>
+
+  <div class="card">
+    <h2>Radarr</h2>
+    <label>URL</label>
+    <input type="text" name="radarr_url" value="{{ cfg.arr.radarr.url }}">
+    <label>API key <span class="hint">(leave blank to keep current)</span></label>
+    <input type="password" name="radarr_api_key" placeholder="{{ '••••••••' if cfg.arr.radarr.api_key else '' }}">
+  </div>
+
+  <div class="card">
+    <h2>Gemini</h2>
+    <label>API key <span class="hint">(leave blank to keep current)</span></label>
+    <input type="password" name="gemini_api_key" placeholder="{{ '••••••••' if cfg.gemini.api_key else '' }}">
+    <label>Models <span class="hint">— one per line, tried in order on rate-limit</span></label>
+    <textarea name="gemini_models">{{ cfg.gemini.models | join('\n') }}</textarea>
+  </div>
+
+  <div class="card">
+    <h2>Languages</h2>
+    <label>Source priority <span class="hint">— ISO-639-2 codes, best first (e.g. eng fra deu spa)</span></label>
+    <input type="text" name="source_priority" value="{{ cfg.languages.source_priority | join(' ') }}">
+    <div class="row">
+      <div><label>Target name</label><input type="text" name="target_name" value="{{ cfg.languages.target.name }}"></div>
+      <div><label>Target code</label><input type="text" name="target_code" value="{{ cfg.languages.target.code }}"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Automation</h2>
+    <div class="check"><input type="checkbox" name="automation_enabled" {{ 'checked' if cfg.automation.enabled }}><span>Automatically translate new titles missing the target language</span></div>
+    <label>Scan interval (minutes)</label>
+    <input type="number" name="scan_interval" value="{{ cfg.automation.scan_interval_minutes }}">
+  </div>
+
+  <div class="card">
+    <h2>Limits</h2>
+    <div class="row">
+      <div><label>Per-model / day</label><input type="number" name="max_daily_per_model" value="{{ cfg.limits.max_daily_per_model }}"></div>
+      <div><label>Total / day</label><input type="number" name="max_daily_total" value="{{ cfg.limits.max_daily_total }}"></div>
+      <div><label>Max per run</label><input type="number" name="max_per_run" value="{{ cfg.limits.max_per_run }}"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>SDH stripping</h2>
+    <div class="check"><input type="checkbox" name="sdh_brackets" {{ 'checked' if cfg.sdh.brackets }}><span>[bracketed] cues</span></div>
+    <div class="check"><input type="checkbox" name="sdh_parens" {{ 'checked' if cfg.sdh.parens }}><span>(parenthesised) cues</span></div>
+    <div class="check"><input type="checkbox" name="sdh_music" {{ 'checked' if cfg.sdh.music }}><span>♪ music lines</span></div>
+    <div class="check"><input type="checkbox" name="sdh_speaker" {{ 'checked' if cfg.sdh.speaker }}><span>SPEAKER: labels</span></div>
+    <div class="check"><input type="checkbox" name="sdh_uppercase" {{ 'checked' if cfg.sdh.uppercase }}><span>FULLY UPPERCASE lines</span></div>
+  </div>
+
+  <div class="card">
+    <h2>Translation quality</h2>
+    <label>Batch size <span class="hint">— subtitle cues sent per Gemini request; per-model overrides live in config (gemini.model_batch)</span></label>
+    <input type="number" name="batch_size" value="{{ cfg.translation.batch_size }}">
+    <div class="check"><input type="checkbox" name="context_enabled" {{ 'checked' if cfg.translation.context_enabled }}><span>Send surrounding lines as context</span></div>
+    <div class="row">
+      <div><label>Context before</label><input type="number" name="context_before" value="{{ cfg.translation.context_before }}"></div>
+      <div><label>Context after</label><input type="number" name="context_after" value="{{ cfg.translation.context_after }}"></div>
+    </div>
+    <div class="check"><input type="checkbox" name="add_translator_credit" {{ 'checked' if cfg.translation.add_translator_credit }}><span>Add a translator-credit line</span></div>
+  </div>
+
+  <div class="toolbar"><span class="spacer"></span><button class="primary" type="submit">Save settings</button></div>
+</form>
+{% endblock %}

@@ -1,0 +1,74 @@
+{
+  "_comment": "Copy nothing manually — this file documents the shape of config/config.json, which the first-run setup wizard creates for you. Secrets stay in config/ and are never committed.",
+
+  "onboarding_completed": false,
+
+  "auth": {
+    "enabled": false,
+    "password_hash": ""
+  },
+
+  "arr": {
+    "sonarr": { "url": "http://sonarr:8989", "api_key": "" },
+    "radarr": { "url": "http://radarr:7878", "api_key": "" }
+  },
+
+  "gemini": {
+    "api_key": "",
+    "models": [
+      "gemini-3-flash-preview",
+      "gemini-2.0-flash",
+      "gemini-2.0-flash-lite"
+    ],
+    "model_batch": {
+      "gemini-3-flash-preview": 200,
+      "gemini-2.0-flash": 200,
+      "gemini-2.0-flash-lite": 150
+    }
+  },
+
+  "languages": {
+    "source_priority": ["eng", "fra", "deu", "spa"],
+    "target": { "name": "Czech", "code": "cs" }
+  },
+
+  "sdh": {
+    "brackets": true,
+    "parens": true,
+    "music": true,
+    "speaker": true,
+    "uppercase": false
+  },
+
+  "limits": {
+    "max_daily_per_model": 18,
+    "max_daily_total": 120,
+    "max_per_run": 10
+  },
+
+  "automation": {
+    "enabled": false,
+    "scan_interval_minutes": 30,
+    "rpd_reset_tz": "America/Los_Angeles"
+  },
+
+  "translation": {
+    "api_timeout": 1200,
+    "max_output_tokens": 65536,
+    "max_retries": 3,
+    "retry_delay": 5,
+    "context_enabled": true,
+    "context_before": 2,
+    "context_after": 2,
+    "add_translator_credit": false,
+    "batch_size": 150
+  },
+
+  "validation": {
+    "enabled": true,
+    "min_chars": 1,
+    "max_chars": 200,
+    "min_duration_ms": 100,
+    "max_duration_s": 15
+  }
+}

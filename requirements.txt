@@ -1,0 +1,4 @@
+flask>=3.0
+waitress>=3.0
+requests>=2.31
+pgsrip>=0.1.11
