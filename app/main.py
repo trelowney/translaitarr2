@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""translaitarr2 — web app entry point.
+"""translAItarr2 — web app entry point.
 
 Boots Flask, gates first-run setup behind a wizard, and serves the three main
 pages (Library / Queue / Settings). The *arr client, library scanner and the
@@ -213,7 +213,7 @@ def status():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "9878"))
     log.info("=" * 56)
-    log.info("translaitarr2 starting on port %s", port)
+    log.info("translAItarr2 starting on port %s", port)
     log.info("=" * 56)
     try:
         from waitress import serve  # production WSGI server

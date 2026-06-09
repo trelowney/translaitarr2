@@ -1,6 +1,6 @@
-# Example deployment for translaitarr2.
+# Example deployment for translAItarr2.
 #
-# translaitarr2 needs to reach your Sonarr/Radarr API and read your media files.
+# translAItarr2 needs to reach your Sonarr/Radarr API and read your media files.
 # Two common setups:
 #
 #  A) Standalone (this file): point SONARR_URL/RADARR_URL at reachable addresses
@@ -22,7 +22,7 @@ services:
     volumes:
       # Persistent config + queue DB + logs. Holds your API keys — keep it private.
       - ./config:/config
-      # Your media library. translaitarr2 writes <video>.cs.srt next to each file.
+      # Your media library. translAItarr2 writes <video>.cs.srt next to each file.
       - /path/to/media:/data
     ports:
       - 9878:9878

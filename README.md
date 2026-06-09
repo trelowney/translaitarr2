@@ -1,8 +1,8 @@
-# translaitarr2
+# translAItarr2
 
 **AI subtitle translation for your media library — with a web UI and native Sonarr/Radarr integration.**
 
-translaitarr2 watches your Sonarr/Radarr library, finds video files that don't yet
+translAItarr2 watches your Sonarr/Radarr library, finds video files that don't yet
 have a subtitle in your language, and translates one for them using Google Gemini.
 Unlike most subtitle-translation tools, it doesn't need a ready-made `.srt` lying
 around — it can **extract embedded subtitles from the video** and even **OCR
@@ -19,7 +19,7 @@ Tools like [Bazarr](https://www.bazarr.media/) and
 [Lingarr](https://github.com/lingarr-translate/lingarr) translate subtitle files
 that already exist on disk. They can't help when the only English subtitle is
 **embedded inside the MKV** or is a **PGS bitmap** (common on Blu-ray rips).
-translaitarr2 handles those cases:
+translAItarr2 handles those cases:
 
 - ✅ Translates existing sidecar `.srt`
 - ✅ Extracts and translates **embedded** text subtitles
@@ -53,7 +53,7 @@ docker compose up -d
 
 Open `http://<host>:9878` and follow the setup wizard.
 
-> **Note:** translaitarr2 must be able to reach your Sonarr/Radarr API and read your
+> **Note:** translAItarr2 must be able to reach your Sonarr/Radarr API and read your
 > media files. If you run it inside your existing *arr Docker network you can use
 > service names like `http://sonarr:8989`; otherwise use the host's IP and port.
 
@@ -69,7 +69,7 @@ docker compose pull && docker compose up -d
 
 **Automatic updates:** add [Watchtower](https://github.com/containrrr/watchtower)
 to your stack (most *arr users already run it) and it will pull new releases and
-recreate translaitarr2 for you — exactly like it does for Sonarr/Radarr:
+recreate translAItarr2 for you — exactly like it does for Sonarr/Radarr:
 
 ```yaml
   watchtower:
@@ -104,7 +104,7 @@ every field. Highlights:
 
 ### Recommended Gemini models & batch size
 
-translaitarr2 sends subtitles to Gemini in **batches** (N cues per request) and tries
+translAItarr2 sends subtitles to Gemini in **batches** (N cues per request) and tries
 your models top-to-bottom, falling back to the next one when a model is rate-limited.
 On the **free tier each model has its own small daily request quota** (roughly ~20
 requests/day per model, reset at midnight US-Pacific), so a bigger batch means fewer
@@ -138,7 +138,7 @@ Bazarr 6767) so it can coexist on the same host.
 
 ## How it decides what to translate
 
-For each downloaded title Sonarr/Radarr reports, translaitarr2 inspects the actual
+For each downloaded title Sonarr/Radarr reports, translAItarr2 inspects the actual
 file and **skips** it if it already has the target language as audio, an embedded
 subtitle, or a sidecar `.srt`. Otherwise it selects the best available source
 subtitle (by your priority order), extracting or OCR-ing it if needed, and queues a

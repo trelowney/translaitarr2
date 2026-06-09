@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}translaitarr2{% endblock %}</title>
+  <title>{% block title %}translAItarr2{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body>
   {% if show_nav|default(true) %}
   <header class="topbar">
-    <div class="brand">translaitarr<span class="accent">2</span></div>
+    <div class="brand">transl<span class="accent">AI</span>tarr2</div>
     <nav class="tabs">
       <a href="{{ url_for('library') }}" class="{{ 'active' if active=='library' }}">Library</a>
       <a href="{{ url_for('queue') }}" class="{{ 'active' if active=='queue' }}">Queue</a>
@@ -27,6 +27,6 @@
     {% block content %}{% endblock %}
   </main>
 
-  <footer class="foot">translaitarr2 · GPL-3.0</footer>
+  <footer class="foot">translAItarr2 · GPL-3.0</footer>
 </body>
 </html>

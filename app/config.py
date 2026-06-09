@@ -1,4 +1,4 @@
-"""Configuration loading/saving for translaitarr2.
+"""Configuration loading/saving for translAItarr2.
 
 Config lives in the mounted volume at /config/config.json. It is created by the
 first-run setup wizard, never shipped with the image. Secrets may also come from
