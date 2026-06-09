@@ -45,6 +45,9 @@ DEFAULTS = {
         "source_priority": ["eng", "fra", "deu", "spa"],
         "target": {"name": "Czech", "code": "cs"},
     },
+    # Map *arr-reported paths to translAItarr2's local mount, if they differ.
+    # Each rule: {"from": "/movies", "to": "/data/movies"}. Empty = identity.
+    "paths": {"remap": []},
     "sdh": {"brackets": True, "parens": True, "music": True, "speaker": True, "uppercase": False},
     "limits": {"max_daily_per_model": 18, "max_daily_total": 120, "max_per_run": 10},
     "automation": {"enabled": False, "scan_interval_minutes": 30, "rpd_reset_tz": "America/Los_Angeles"},

@@ -32,6 +32,10 @@
     "target": { "name": "Czech", "code": "cs" }
   },
 
+  "paths": {
+    "remap": []
+  },
+
   "sdh": {
     "brackets": true,
     "parens": true,

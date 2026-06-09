@@ -17,6 +17,7 @@ from flask import (
 
 import arr
 import config as cfgmod
+import scanner
 
 # ── Logging (stdout for `docker logs` + a file in the config volume) ──────────
 logging.basicConfig(
@@ -141,13 +142,17 @@ def setup_submit():
 # ── Pages (placeholders until the scanner/engine are wired in) ─────────────────
 @app.route("/")
 def library():
-    cfg = cfgmod.load_config()
-    titles, errors = arr.list_all_titles(cfg)
+    rows, errors = scanner.scan(cfgmod.load_config())
     for e in errors:
         flash(e)
-    # Subtitle status is filled in by the scanner (next milestone); show neutral for now.
-    rows = [{"title": t["title"], "kind": t["kind"], "status": "Not scanned", "chip": "gray"} for t in titles]
     return render_template("library.html", titles=rows, active="library")
+
+
+@app.route("/rescan", methods=["POST"])
+def rescan():
+    _, errors = scanner.scan(cfgmod.load_config(), force=True)
+    flash("Rescan complete." if not errors else "Rescan finished with errors: " + "; ".join(errors))
+    return redirect(url_for("library"))
 
 
 @app.route("/api/arr/test", methods=["POST"], endpoint="arr_test")

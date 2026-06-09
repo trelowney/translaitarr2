@@ -10,7 +10,7 @@
     <option value="missing">Missing target language</option>
   </select>
   <span class="spacer"></span>
-  <button class="btn">Rescan</button>
+  <form method="post" action="{{ url_for('rescan') }}" style="display:inline"><button class="btn" type="submit">Rescan</button></form>
   <button class="btn primary">Translate all missing</button>
 </div>
 
