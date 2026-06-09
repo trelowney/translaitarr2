@@ -19,6 +19,7 @@ import arr
 import config as cfgmod
 import db
 import scanner
+import version
 import worker
 
 # ── Logging (stdout for `docker logs` + a file in the config volume) ──────────
@@ -77,6 +78,12 @@ def gate():
             return jsonify({"ok": False, "message": "Authentication required"}), 401
         return redirect(url_for("login"))
     return None
+
+
+@app.context_processor
+def inject_version():
+    # Cache-only read; the background thread does the GitHub fetch.
+    return {"version": version.info()}
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -307,6 +314,7 @@ if __name__ == "__main__":
     log.info("=" * 56)
     db.init_db()
     worker.start()
+    version.start()
     try:
         from waitress import serve  # production WSGI server
         serve(app, host="0.0.0.0", port=port, threads=8)

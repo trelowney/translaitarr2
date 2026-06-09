@@ -19,13 +19,14 @@ _started = False
 
 
 def start():
-    """Start the worker thread once (idempotent)."""
+    """Start the worker + automation threads once (idempotent)."""
     global _started
     if _started:
         return
     _started = True
     threading.Thread(target=_loop, name="worker", daemon=True).start()
-    log.info("Worker thread started")
+    threading.Thread(target=_automation_loop, name="automation", daemon=True).start()
+    log.info("Worker + automation threads started")
 
 
 def _loop():
@@ -73,3 +74,41 @@ def _loop():
             db.set_status(job_id, "error", error=str(e))
 
         time.sleep(3)
+
+
+def _automation_loop():
+    """When enabled, periodically scan the library and queue any title missing the
+    target language (up to max_per_run per cycle). Files that previously errored
+    are left for a manual retry rather than re-queued every cycle."""
+    while True:
+        cfg = cfgmod.load_config()
+        auto = cfg.get("automation", {})
+        if not auto.get("enabled"):
+            time.sleep(60)  # re-check the toggle each minute
+            continue
+
+        try:
+            rows, _ = scanner.scan(cfg)
+            cap = cfg["limits"].get("max_per_run", 10)
+            queued = 0
+            for r in rows:
+                if queued >= cap:
+                    break
+                if (r["translatable"]
+                        and not db.has_errored_job(r["local_path"])
+                        and db.add_job(r["local_path"], r["title"], source="auto")[0]):
+                    queued += 1
+            if queued:
+                log.info("Automation: queued %s title(s)", queued)
+        except Exception as e:  # noqa: BLE001 - keep the automation thread alive
+            log.error("Automation scan failed: %s", e)
+
+        # Sleep the configured interval, but wake every 30s so toggling the
+        # switch off (or changing the interval) takes effect promptly.
+        interval = max(1, int(auto.get("scan_interval_minutes", 30))) * 60
+        slept = 0
+        while slept < interval:
+            time.sleep(30)
+            slept += 30
+            if not cfgmod.load_config().get("automation", {}).get("enabled"):
+                break

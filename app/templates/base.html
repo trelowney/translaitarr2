@@ -18,6 +18,13 @@
   </header>
   {% endif %}
 
+  {% if version.update_available %}
+  <div class="update-banner">
+    A new version is available: <strong>{{ version.latest }}</strong> (you have {{ version.current }}).
+    <a href="{{ version.url }}" target="_blank" rel="noopener">View changelog →</a>
+  </div>
+  {% endif %}
+
   <main class="content">
     {% with messages = get_flashed_messages() %}
       {% if messages %}
@@ -27,6 +34,6 @@
     {% block content %}{% endblock %}
   </main>
 
-  <footer class="foot">translAItarr2 · GPL-3.0</footer>
+  <footer class="foot">translAItarr2 v{{ version.current }} · GPL-3.0</footer>
 </body>
 </html>

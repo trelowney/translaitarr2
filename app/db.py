@@ -109,6 +109,17 @@ def list_jobs(limit=50):
     return rows
 
 
+def has_errored_job(path):
+    """True if this file has a job in the 'error' state (so automation skips it
+    and leaves it for a manual retry instead of looping)."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT 1 FROM jobs WHERE file_path=? AND status='error' LIMIT 1", (path,)
+    ).fetchone()
+    conn.close()
+    return row is not None
+
+
 def retry(job_id):
     conn = get_db()
     conn.execute(
