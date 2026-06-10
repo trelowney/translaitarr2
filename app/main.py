@@ -277,6 +277,18 @@ def translate():
     return redirect(url_for("queue"))
 
 
+@app.route("/verify", methods=["POST"])
+def verify():
+    path = request.form.get("path", "")
+    title = request.form.get("title", "")
+    if not path:
+        flash("No file path provided.")
+        return redirect(url_for("library"))
+    added, info = db.add_job(path, title, source="manual", action="verify")
+    flash(f"Queued for verification: {title or path}" if added else f"Already queued (job {info}).")
+    return redirect(url_for("queue"))
+
+
 @app.route("/translate-all", methods=["POST"])
 def translate_all():
     rows, _ = scanner.scan(cfgmod.load_config())
@@ -400,6 +412,8 @@ def settings_save():
 
     if f.get("source_preference") in ("video", "sidecar"):
         cfg["translation"]["source_preference"] = f["source_preference"]
+    cfg["translation"]["verify"] = f.get("verify_enabled") == "on"
+    cfg["translation"]["verify_samples"] = _int(f.get("verify_samples"), cfg["translation"]["verify_samples"])
 
     cfgmod.save_config(cfg)
     # Auto-save (fetch) requests get a quiet 204; full form posts redirect.

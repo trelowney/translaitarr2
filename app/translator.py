@@ -551,3 +551,117 @@ def translate_file(file_path, cfg, force=False, usage=None):
     log.info("Done: %s/%s fell back, model=%s", missing, total, used_model)
     log.info("=" * 60)
     return "translated", model_calls
+
+
+# ── Translation verification (semantic, model-judged) ────────────────────────
+
+def _start_ms(tc):
+    m = re.search(r"(\d{2}:\d{2}:\d{2},\d{3})", tc)
+    return _tc_to_ms(m.group(1)) if m else -1
+
+
+def _judge(prompt, cfg, usage):
+    """One Gemini call (temperature 0) trying models in order, honouring daily
+    limits. Returns (text, model_calls)."""
+    order = cfg["gemini"].get("models") or DEFAULT_MODELS
+    default_limit = cfg["limits"].get("max_daily_per_model", 18)
+    per_model = cfg["gemini"].get("model_daily_limit", {})
+    api_key = cfg["gemini"]["api_key"]
+    timeout = cfg["translation"].get("api_timeout", 1200)
+    last = None
+    for model in order:
+        if usage.get(model, 0) >= per_model.get(model, default_limit):
+            continue
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        body = {"contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"temperature": 0.0, "maxOutputTokens": 2048}}
+        try:
+            r = requests.post(url, json=body, timeout=timeout,
+                              headers={"x-goog-api-key": api_key, "Content-Type": "application/json"})
+        except requests.RequestException as e:
+            last = GeminiError("000", str(e)); continue
+        if r.status_code != 200:
+            last = GeminiError(str(r.status_code), r.text[:200])
+            if r.status_code in (429, 500, 502, 503, 504):
+                continue
+            raise last
+        usage[model] = usage.get(model, 0) + 1
+        cand = (r.json().get("candidates") or [{}])[0]
+        return cand.get("content", {}).get("parts", [{}])[0].get("text", ""), {model: 1}
+    raise AllModelsExhaustedError(f"verify: no model available ({last})")
+
+
+def verify_translation(video_path, cfg, usage=None):
+    """Check a finished translation by having the model judge meaning — it tolerates
+    paraphrase (a round-trip is never word-for-word), flagging only genuinely wrong,
+    untranslated or garbled lines. Returns (result, model_calls). result keys: ok,
+    checked, leftover (untranslated source left in), bad (mistranslated samples),
+    samples, note."""
+    import media
+    usage = usage if usage is not None else {}
+    target_code = cfg["languages"]["target"]["code"]
+    target_lang = cfg["languages"]["target"]["name"]
+
+    cs_path = media.target_sidecar_path(video_path, target_code)
+    if not os.path.exists(cs_path):
+        return {"ok": False, "note": "no translation to verify"}, {}
+    src = media.select_source(video_path, cfg)
+    if src is None:
+        return {"ok": False, "note": "no source to compare against"}, {}
+    src_lang = LANG_NAMES.get(src["lang"], src["lang"].upper())
+
+    with tempfile.TemporaryDirectory(prefix="verify_") as tmp:
+        src_srt = os.path.join(tmp, "src.srt")
+        if src["kind"] == "sidecar":
+            shutil.copy2(src["path"], src_srt)
+        elif src["kind"] == "image":
+            ocr_pgs_to_srt(video_path, src["index"], src["lang"], src_srt, tmp)
+        else:
+            extract_subtitle(video_path, src["index"], src_srt)
+
+        src_map = {_start_ms(tc): " ".join(t).strip() for _, tc, t in parse_srt(src_srt)}
+        aligned = []
+        for _, tc, t in parse_srt(cs_path):
+            en = src_map.get(_start_ms(tc))
+            if en:
+                aligned.append((en, " ".join(t).strip()))
+        if not aligned:
+            return {"ok": False, "note": "could not align subtitles by timecode"}, {}
+
+        # Reliable structural check: source-language text left untranslated.
+        leftover = sum(1 for en, cs in aligned if len(en) > 15 and cs.lower() == en.lower())
+
+        long_pairs = [a for a in aligned if len(a[0]) > 15]
+        n = min(int(cfg["translation"].get("verify_samples", 8)), len(long_pairs))
+        sample = [long_pairs[i * len(long_pairs) // n] for i in range(n)] if n else []
+
+        model_calls, bad = {}, 0
+        if sample:
+            lines = "\n".join(f"{i}. SOURCE: {en}\n   TRANSLATION: {cs}"
+                              for i, (en, cs) in enumerate(sample, 1))
+            prompt = (
+                f"You are a subtitle-translation QA reviewer. Each numbered pair has a "
+                f"{src_lang} SOURCE line and its {target_lang} TRANSLATION.\n"
+                f"Mark a translation BAD only if it is wrong in meaning, left untranslated "
+                f"(still {src_lang}), empty, or garbled. Natural paraphrase, different word "
+                f"order and style are GOOD — never flag those.\n"
+                f"Reply with ONLY a JSON array of the numbers of the BAD ones, e.g. [2,5]. "
+                f"If all are fine, reply [].\n\n{lines}"
+            )
+            try:
+                text, model_calls = _judge(prompt, cfg, usage)
+            except (GeminiError, AllModelsExhaustedError) as e:
+                return {"ok": False, "checked": len(aligned), "leftover": leftover,
+                        "note": f"verification call failed: {e}"}, model_calls
+            m = re.search(r"\[[\d,\s]*\]", text)
+            try:
+                bad = len(set(json.loads(m.group(0)))) if m else 0
+            except ValueError:
+                bad = 0
+
+        issues = leftover + bad
+        ok = issues == 0
+        log.info("Verify: %s aligned · untranslated=%s · mistranslated=%s/%s -> %s",
+                 len(aligned), leftover, bad, len(sample), "OK" if ok else f"{issues} ISSUE(S)")
+        return {"ok": ok, "checked": len(aligned), "leftover": leftover,
+                "bad": bad, "samples": len(sample)}, model_calls

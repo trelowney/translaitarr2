@@ -65,8 +65,11 @@
       <option value="video" {{ 'selected' if cfg.translation.source_preference == 'video' }}>From the video — embedded text / Blu-ray PGS (OCR)</option>
       <option value="sidecar" {{ 'selected' if cfg.translation.source_preference == 'sidecar' }}>Prefer an external .srt next to the file, fall back to the video</option>
     </select>
+    <div class="check" style="margin-top:14px"><input type="checkbox" name="verify_enabled" {{ 'checked' if cfg.translation.verify }}><span>Verify each translation automatically <span class="hint">— back-translate a sample to the source language and flag dubious jobs (one extra request per job)</span></span></div>
+    <label>Verify samples <span class="hint">— cues checked per verification</span></label>
+    <input type="number" name="verify_samples" value="{{ cfg.translation.verify_samples }}">
     <div class="check" style="margin-top:14px"><input type="checkbox" checked disabled><span>Add a credit line to every subtitle — &ldquo;Translated by translAItarr2&rdquo; and the model used <span class="hint">(always on)</span></span></div>
-    <p class="hint">Batch size is set per model in the Gemini section above.</p>
+    <p class="hint">Batch size is set per model in the Gemini section above. Manual verification is the &ldquo;Verify&rdquo; button on a translated title in the Library.</p>
   </div>
 
   <div class="card">

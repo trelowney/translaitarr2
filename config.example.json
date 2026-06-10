@@ -74,7 +74,9 @@
     "context_after": 2,
     "add_translator_credit": false,
     "batch_size": 150,
-    "source_preference": "video"
+    "source_preference": "video",
+    "verify": false,
+    "verify_samples": 8
   },
 
   "validation": {

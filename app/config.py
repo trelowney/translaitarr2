@@ -83,6 +83,10 @@ DEFAULTS = {
         # 'video' = translate the subtitle inside the video (embedded/PGS);
         # 'sidecar' = prefer an external source .srt next to it, then fall back.
         "source_preference": "video",
+        # Back-translation verification: sample the result back to the source
+        # language and flag dubious jobs. Costs one extra request per job.
+        "verify": False,
+        "verify_samples": 8,
     },
     "validation": {
         "enabled": True,

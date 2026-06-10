@@ -35,6 +35,7 @@ def init_db():
             source      TEXT DEFAULT 'manual',
             status      TEXT DEFAULT 'pending',
             force       INTEGER DEFAULT 0,
+            action      TEXT DEFAULT 'translate',
             added_at    TEXT DEFAULT (datetime('now')),
             started_at  TEXT,
             finished_at TEXT,
@@ -54,29 +55,32 @@ def init_db():
         """
     )
     # Migrate DBs created before the 'force' column existed.
-    try:
-        conn.execute("ALTER TABLE jobs ADD COLUMN force INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
+    for ddl in ("ALTER TABLE jobs ADD COLUMN force INTEGER DEFAULT 0",
+                "ALTER TABLE jobs ADD COLUMN action TEXT DEFAULT 'translate'"):
+        try:
+            conn.execute(ddl)
+        except sqlite3.OperationalError:
+            pass
     conn.commit()
     conn.close()
 
 
 # ── Jobs ──────────────────────────────────────────────────────────────────────
 
-def add_job(file_path, title="", source="manual", force=False):
-    """Queue a file. Returns (added, id). Skips if already pending/processing."""
+def add_job(file_path, title="", source="manual", force=False, action="translate"):
+    """Queue a file. Returns (added, id). Skips if already pending/processing
+    for the same action."""
     conn = get_db()
     existing = conn.execute(
-        "SELECT id FROM jobs WHERE file_path=? AND status IN ('pending','processing')",
-        (file_path,),
+        "SELECT id FROM jobs WHERE file_path=? AND action=? AND status IN ('pending','processing')",
+        (file_path, action),
     ).fetchone()
     if existing:
         conn.close()
         return False, existing["id"]
     cur = conn.execute(
-        "INSERT INTO jobs (file_path, title, source, force) VALUES (?, ?, ?, ?)",
-        (file_path, title, source, 1 if force else 0),
+        "INSERT INTO jobs (file_path, title, source, force, action) VALUES (?, ?, ?, ?, ?)",
+        (file_path, title, source, 1 if force else 0, action),
     )
     conn.commit()
     jid = cur.lastrowid
@@ -87,10 +91,10 @@ def add_job(file_path, title="", source="manual", force=False):
 def get_next_pending():
     conn = get_db()
     row = conn.execute(
-        "SELECT id, file_path, title, force FROM jobs WHERE status='pending' ORDER BY id LIMIT 1"
+        "SELECT id, file_path, title, force, action FROM jobs WHERE status='pending' ORDER BY id LIMIT 1"
     ).fetchone()
     conn.close()
-    return (row["id"], row["file_path"], row["title"], bool(row["force"])) if row else None
+    return (row["id"], row["file_path"], row["title"], bool(row["force"]), row["action"]) if row else None
 
 
 def set_status(job_id, status, result=None, error=None):

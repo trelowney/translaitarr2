@@ -18,6 +18,14 @@ log = logging.getLogger("translaitarr2")
 _started = False
 
 
+def _verify_label(r):
+    if r.get("ok"):
+        return f"verify ✓ ({r.get('checked', 0)} cues)"
+    if "leftover" in r or "bad" in r:
+        return f"verify ⚠ {r.get('leftover', 0) + r.get('bad', 0)} issue(s)"
+    return "verify: " + r.get("note", "failed")
+
+
 def start():
     """Start the worker + automation threads once (idempotent)."""
     global _started
@@ -36,7 +44,7 @@ def _loop():
             time.sleep(10)
             continue
 
-        job_id, path, title, force = job
+        job_id, path, title, force, action = job
         cfg = cfgmod.load_config()
 
         if not cfg["gemini"].get("api_key"):
@@ -52,18 +60,30 @@ def _loop():
             time.sleep(secs)
             continue
 
-        log.info("Job %s: starting — %s", job_id, title or path)
+        log.info("Job %s: starting [%s] — %s", job_id, action, title or path)
         db.set_status(job_id, "processing")
         try:
             usage = db.today_per_model()
-            outcome, model_calls = translator.translate_file(path, cfg, force=force, usage=usage)
-            if outcome == "translated":
-                total = db.record_calls(model_calls)
-                db.set_status(job_id, "done", result="translated")
-                log.info("Job %s: done (today %s/%s)", job_id, total, max_total)
+            if action == "verify":
+                vres, model_calls = translator.verify_translation(path, cfg, usage=usage)
+                db.record_calls(model_calls)
+                db.set_status(job_id, "done", result=_verify_label(vres))
+                log.info("Job %s: %s", job_id, _verify_label(vres))
             else:
-                db.set_status(job_id, "done", result=outcome)
-                log.info("Job %s: %s", job_id, outcome)
+                outcome, model_calls = translator.translate_file(path, cfg, force=force, usage=usage)
+                if outcome == "translated":
+                    extra = ""
+                    if cfg["translation"].get("verify"):
+                        vres, vcalls = translator.verify_translation(path, cfg, usage=usage)
+                        for m, n in vcalls.items():
+                            model_calls[m] = model_calls.get(m, 0) + n
+                        extra = " · " + _verify_label(vres)
+                    total = db.record_calls(model_calls)
+                    db.set_status(job_id, "done", result="translated" + extra)
+                    log.info("Job %s: done (today %s/%s)", job_id, total, max_total)
+                else:
+                    db.set_status(job_id, "done", result=outcome)
+                    log.info("Job %s: %s", job_id, outcome)
             scanner.invalidate(path)
         except translator.AllModelsExhaustedError as e:
             log.warning("Job %s: %s — requeuing, sleeping until reset", job_id, e)

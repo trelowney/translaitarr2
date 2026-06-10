@@ -28,17 +28,30 @@ translAItarr2 handles those cases:
 
 ## Features
 
-- **Web UI (dark, minimal)** — Library, Queue, and Settings.
-- **Native Sonarr/Radarr integration** via their REST API — the library shows your
-  real series / episode / movie titles, not raw file paths. **No webhook needed.**
-- **First-run setup wizard** — connect Sonarr/Radarr, add your Gemini key, choose
-  languages, and optionally set a password. Nothing to hand-edit.
-- **Automation** — optional periodic scan that translates anything new without your
-  target language; or trigger translations manually per-title.
-- **Quality options** — SDH/caption stripping, surrounding-line context for better
-  translations, and output sanity validation.
-- **Privacy & safety first** — no telemetry; secrets stay in your local config
-  volume; runs as a non-root user.
+- **Web UI (dark, minimal)** — Library (split into Movies / TV Shows), Queue, and Settings.
+- **Native Sonarr/Radarr integration** via their REST API — real series / episode /
+  movie titles, not raw file paths. **No webhook needed.** Path remapping is a guided
+  table that auto-detects your *arr root folders.
+- **First-run setup wizard** — connect Sonarr/Radarr (with Test buttons), add your
+  Gemini key, pick source/target languages, optionally set a password. Nothing to hand-edit.
+- **Smart source selection** — translate the subtitle **embedded in the video** (text
+  or Blu-ray **PGS via OCR**), or prefer an **external source `.srt`** next to the file;
+  picks the best source language by your configured priority.
+- **Knows what a title already has** — skips files that already carry your target
+  language and shows whether that's **audio (dub)**, **subtitles**, or both.
+- **Gemini, tuned for the free tier** — ordered model list (fetched from the API,
+  drag-to-reorder) with **per-model batch size and daily request limit**, automatic
+  fallback between models, and adaptive batching with an untranslated-output check.
+- **Automation** — optional periodic scan that translates anything new; re-translate
+  automatically on a release upgrade, or manually per-title.
+- **Optional back-translation verification** — sample a finished translation back to
+  the source language to flag dubious jobs; run it automatically or on demand.
+- **Quality options** — SDH/caption stripping, output sanity validation (drops junk
+  cues), and a credit line on every file.
+- **Live queue** — jobs, today's per-model usage, outcome tallies, container CPU/RAM
+  and a live log, all auto-refreshing; Settings auto-save (no Save button).
+- **Privacy & safety first** — no telemetry; secrets stay in your local config volume,
+  redacted from logs; runs as a non-root user; in-app update check.
 
 ## Roadmap
 
@@ -52,6 +65,7 @@ translAItarr2 is in **early development**. Rough plan:
 - Selectable source: translate the **video's embedded subtitle** or **prefer an external `.srt`** next to it
 - Skip rules following your configured target language (shows whether a title already has target **audio**, **subtitles**, or both); SDH stripping; output validation
 - Setup wizard, optional password, auto-saving settings, live queue (usage + outcomes + CPU/RAM + log)
+- Optional translation verification — model-judged so it tolerates paraphrase; automatic or on demand
 - Path remapping (UI), in-app update check, multi-arch Docker image
 
 **Planned (later)**
@@ -61,7 +75,6 @@ translAItarr2 is in **early development**. Rough plan:
 - Completion/failure notifications (webhook / email)
 - UI translations (i18n), starting with Czech
 - Context-aware translation (use surrounding lines for better coherence)
-- Optional automatic **back-translation verification** (sample the result back to the source language and flag dubious jobs)
 
 ## Quick start
 
