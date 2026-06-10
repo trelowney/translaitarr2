@@ -73,7 +73,6 @@ translAItarr2 is in **early development**. Rough plan:
 - **More translation providers** — [OpenRouter.ai](https://openrouter.ai/), DeepL,
   OpenAI-compatible / local models, Cloudflare Workers AI (choose your engine; Gemini stays the default)
 - Multiple target languages at once
-- Completion/failure notifications (webhook / email)
 - UI translations (i18n), starting with Czech
 
 ## Quick start
