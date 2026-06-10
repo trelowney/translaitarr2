@@ -54,12 +54,15 @@ def _lang(stream):
     return _norm(stream.get("tags", {}).get("language", ""))
 
 
-def _is_forced_or_sdh(stream):
-    disp = stream.get("disposition", {})
-    if disp.get("forced") or disp.get("hearing_impaired"):
-        return True
+def _is_forced(stream):
     title = (stream.get("tags", {}).get("title", "") or "").lower()
-    return any(w in title for w in ("forced", "sdh", "hearing", "commentary"))
+    return bool(stream.get("disposition", {}).get("forced")) or "forced" in title
+
+
+def _is_sdh(stream):
+    title = (stream.get("tags", {}).get("title", "") or "").lower()
+    return (bool(stream.get("disposition", {}).get("hearing_impaired"))
+            or any(w in title for w in ("sdh", "hearing", "commentary")))
 
 
 def has_czech_audio(streams):
@@ -81,23 +84,24 @@ def best_source_subtitle(streams, source_priority):
     None. ``kind`` is 'text' or 'image'. Prefers text over image, honours the
     priority order, skips Czech/forced/SDH; non-prioritised languages rank last.
     """
-    subs = [s for s in streams if s.get("codec_type") == "subtitle" and not _is_forced_or_sdh(s)]
+    subs = [s for s in streams
+            if s.get("codec_type") == "subtitle" and _lang(s) not in CZECH_CODES]
+    if not subs:
+        return None
     prio = [_norm(code) for code in source_priority]
 
     def rank(s):
         lang = _lang(s)
-        return prio.index(lang) if lang in prio else len(prio)
+        lang_score = prio.index(lang) if lang in prio else len(prio)
+        is_image = 1 if s.get("codec_name") in IMAGE_CODECS else 0
+        # Prefer text over image, then language priority, then non-forced, non-SDH.
+        # Forced/SDH are deprioritised, not excluded — a deaf/forced track is still
+        # a usable source if it's the only one (SDH artefacts get stripped later).
+        return (is_image, lang_score, _is_forced(s), _is_sdh(s), s.get("index", 0))
 
-    for want_image in (False, True):  # text first, then image (OCR)
-        cands = [
-            s for s in subs
-            if (s.get("codec_name") in IMAGE_CODECS) == want_image and _lang(s) not in CZECH_CODES
-        ]
-        cands.sort(key=rank)
-        if cands:
-            s = cands[0]
-            return ("image" if want_image else "text", s.get("index"), _lang(s))
-    return None
+    best = min(subs, key=rank)
+    kind = "image" if best.get("codec_name") in IMAGE_CODECS else "text"
+    return (kind, best.get("index"), _lang(best))
 
 
 def classify(path, cfg):

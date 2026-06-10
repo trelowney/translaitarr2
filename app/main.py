@@ -292,6 +292,14 @@ def _apply_lang_model_fields(cfg, f):
     models = _parse_models(f.get("models", ""))
     if models:
         cfg["gemini"]["models"] = models
+        try:
+            raw_batch = json.loads(f.get("model_batch", "{}"))
+        except (ValueError, TypeError):
+            raw_batch = {}
+        cfg["gemini"]["model_batch"] = {
+            m: _int(raw_batch[m], cfg["translation"]["batch_size"])
+            for m in models if m in raw_batch
+        }
 
 
 @app.route("/settings", methods=["POST"], endpoint="settings_save")
@@ -320,13 +328,10 @@ def settings_save():
     for k in ("brackets", "parens", "music", "speaker", "uppercase"):
         cfg["sdh"][k] = f.get(f"sdh_{k}") == "on"
 
-    cfg["translation"]["batch_size"] = _int(f.get("batch_size"), cfg["translation"]["batch_size"])
-    cfg["translation"]["context_enabled"] = f.get("context_enabled") == "on"
-    cfg["translation"]["context_before"] = _int(f.get("context_before"), cfg["translation"]["context_before"])
-    cfg["translation"]["context_after"] = _int(f.get("context_after"), cfg["translation"]["context_after"])
-    cfg["translation"]["add_translator_credit"] = f.get("add_translator_credit") == "on"
-
     cfgmod.save_config(cfg)
+    # Auto-save (fetch) requests get a quiet 204; full form posts redirect.
+    if request.headers.get("X-Requested-With") == "fetch":
+        return ("", 204)
     flash("Settings saved.")
     return redirect(url_for("settings"))
 

@@ -2,9 +2,9 @@
 {% block title %}Settings · translAItarr2{% endblock %}
 {% block content %}
 <h1>Settings</h1>
-<p class="sub">Stored in your config volume. Secrets are write-only and shown as ••••.</p>
+<p class="sub">Changes save automatically. Secrets are write-only and shown as ••••. <span id="save-status" class="autosave-status"></span></p>
 
-<form method="post" action="{{ url_for('settings_save') }}">
+<form method="post" action="{{ url_for('settings_save') }}" data-autosave id="settings-form">
   <div class="card">
     <h2>Sonarr</h2>
     <label>URL</label>
@@ -59,17 +59,10 @@
   </div>
 
   <div class="card">
-    <h2>Translation quality</h2>
-    <label>Batch size <span class="hint">— subtitle cues sent per Gemini request; per-model overrides live in config (gemini.model_batch)</span></label>
-    <input type="number" name="batch_size" value="{{ cfg.translation.batch_size }}">
-    <div class="check"><input type="checkbox" name="context_enabled" {{ 'checked' if cfg.translation.context_enabled }}><span>Send surrounding lines as context</span></div>
-    <div class="row">
-      <div><label>Context before</label><input type="number" name="context_before" value="{{ cfg.translation.context_before }}"></div>
-      <div><label>Context after</label><input type="number" name="context_after" value="{{ cfg.translation.context_after }}"></div>
-    </div>
-    <div class="check"><input type="checkbox" name="add_translator_credit" {{ 'checked' if cfg.translation.add_translator_credit }}><span>Add a translator-credit line</span></div>
+    <h2>Translation</h2>
+    <div class="check"><input type="checkbox" checked disabled><span>Add a credit line to every subtitle — &ldquo;Translated by translAItarr2&rdquo; and the model used <span class="hint">(always on)</span></span></div>
+    <p class="hint">Batch size is set per model in the Gemini section above.</p>
   </div>
 
-  <div class="toolbar"><span class="spacer"></span><button class="primary" type="submit">Save settings</button></div>
 </form>
 {% endblock %}

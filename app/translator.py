@@ -402,7 +402,7 @@ def _ms_to_tc(ms):
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 
-def prepend_credit(srt_path, src_lang, tgt_lang, model):
+def prepend_credit(srt_path, model):
     with open(srt_path, encoding="utf-8") as f:
         content = f.read()
     tcs = re.findall(r"^(\d{2}:\d{2}:\d{2},\d{3})\s+-->\s+(\d{2}:\d{2}:\d{2},\d{3})", content, re.MULTILINE)
@@ -429,7 +429,7 @@ def prepend_credit(srt_path, src_lang, tgt_lang, model):
     if slot is None:
         return
     credit = (f"0\n{_ms_to_tc(slot[0])} --> {_ms_to_tc(slot[1])}\n"
-              f"Translated with AI\n{src_lang} -> {tgt_lang} | {model} | {time.strftime('%Y-%m-%d')}\n\n")
+              f"Translated by translAItarr2\n{model}\n\n")
     with open(srt_path, "w", encoding="utf-8") as f:
         f.write(credit + content)
 
@@ -492,8 +492,8 @@ def translate_file(file_path, cfg):
         total = len(src_entries)
         log.info("Merge: %s/%s fell back to source", missing, total)
 
-        if cfg["translation"].get("add_translator_credit"):
-            prepend_credit(merged_srt, src_lang, target_lang, used_model or "AI")
+        # Credit line is always added: "Translated by translAItarr2" + the model.
+        prepend_credit(merged_srt, used_model or "AI")
 
         shutil.copy2(merged_srt, str(out_srt))
 
