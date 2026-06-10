@@ -57,6 +57,10 @@ except OSError:
     app.secret_key = secrets.token_hex(32)
 
 # Endpoints reachable without an active config / login.
+# Changes each process start, so a rebuilt image busts the browser's cache of
+# /static assets (appended as ?v=…).
+ASSET_VER = secrets.token_hex(4)
+
 PUBLIC_ENDPOINTS = {"health", "static", "login", "setup", "setup_submit"}
 # JS helper endpoints the setup wizard needs before a config/auth exists.
 WIZARD_API = {"arr_test", "gemini_models"}
@@ -94,6 +98,11 @@ def inject_version():
 def inject_langs():
     return {"source_languages": cfgmod.SOURCE_LANGUAGES,
             "target_languages": cfgmod.TARGET_LANGUAGES}
+
+
+@app.context_processor
+def inject_assets():
+    return {"asset_ver": ASSET_VER}
 
 
 # ── Health ────────────────────────────────────────────────────────────────────

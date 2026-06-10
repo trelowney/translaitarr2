@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}translAItarr2{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ asset_ver }}">
 </head>
 <body>
   {% if show_nav|default(true) %}
@@ -35,6 +35,6 @@
   </main>
 
   <footer class="foot">translAItarr2 v{{ version.current }} · GPL-3.0</footer>
-  <script src="{{ url_for('static', filename='js/config.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/config.js') }}?v={{ asset_ver }}"></script>
 </body>
 </html>

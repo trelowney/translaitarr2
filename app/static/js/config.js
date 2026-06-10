@@ -75,10 +75,12 @@
       });
       const d = await r.json();
       if (!d.ok) { msg.textContent = "✗ " + d.error; msg.style.color = "var(--red)"; return; }
-      let added = 0;
-      d.models.forEach((m) => { if (!exists(m)) { ul.appendChild(makeLi(m, DEFAULT_BATCH)); added++; } });
+      let added = 0, present = 0;
+      d.models.forEach((m) => {
+        if (exists(m)) { present++; } else { ul.appendChild(makeLi(m, DEFAULT_BATCH)); added++; }
+      });
       sync(true);
-      msg.textContent = "✓ " + d.models.length + " available" + (added ? ", " + added + " added" : "");
+      msg.textContent = "✓ " + d.models.length + " available · " + added + " added · " + present + " already in list";
       msg.style.color = "var(--green)";
     } catch (e) { msg.textContent = "✗ " + e; msg.style.color = "var(--red)"; }
   });
