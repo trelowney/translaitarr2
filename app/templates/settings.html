@@ -25,6 +25,7 @@
     <h2>Gemini</h2>
     <label>API key <span class="hint">(leave blank to keep current)</span></label>
     <input type="password" name="gemini_api_key" placeholder="{{ '••••••••' if cfg.gemini.api_key else '' }}">
+    <div class="toolbar" style="margin:8px 0"><button type="button" class="small" id="gemini-test-btn">Test key</button><span id="gemini-test-msg" class="hint"></span></div>
     {% include "partials/_models.html" %}
   </div>
 

@@ -88,6 +88,30 @@ def add_job(file_path, title="", source="manual", force=False, action="translate
     return True, jid
 
 
+def reset_stuck_jobs():
+    """On startup, return jobs left 'processing' (e.g. killed mid-run) to 'pending'."""
+    conn = get_db()
+    conn.execute("UPDATE jobs SET status='pending', started_at=NULL WHERE status='processing'")
+    n = conn.total_changes
+    conn.commit()
+    conn.close()
+    if n:
+        log.info("Reset %s stuck job(s) to pending", n)
+    return n
+
+
+def prune_jobs(keep=20):
+    """Keep only the newest `keep` finished (done/error) jobs; drop older ones."""
+    conn = get_db()
+    conn.execute(
+        """DELETE FROM jobs WHERE status IN ('done','error') AND id NOT IN
+           (SELECT id FROM jobs WHERE status IN ('done','error') ORDER BY id DESC LIMIT ?)""",
+        (keep,),
+    )
+    conn.commit()
+    conn.close()
+
+
 def get_next_pending():
     conn = get_db()
     row = conn.execute(

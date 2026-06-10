@@ -147,6 +147,26 @@
   detect();
 })();
 
+// ── Gemini key test ──────────────────────────────────────────────────────────
+(function () {
+  const btn = document.getElementById("gemini-test-btn");
+  if (!btn) return;
+  const msg = document.getElementById("gemini-test-msg");
+  btn.addEventListener("click", async () => {
+    const keyEl = document.querySelector("[name=gemini_api_key]");
+    msg.textContent = "Testing…"; msg.style.color = "";
+    try {
+      const r = await fetch("/api/gemini/test", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: keyEl ? keyEl.value : "" }),
+      });
+      const d = await r.json();
+      msg.textContent = (d.ok ? "✓ " : "✗ ") + d.message;
+      msg.style.color = d.ok ? "var(--green)" : "var(--red)";
+    } catch (e) { msg.textContent = "✗ " + e; msg.style.color = "var(--red)"; }
+  });
+})();
+
 // ── Auto-save ────────────────────────────────────────────────────────────────
 (function () {
   const form = document.querySelector("form[data-autosave]");

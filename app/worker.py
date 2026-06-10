@@ -94,6 +94,7 @@ def _loop():
             log.error("Job %s FAILED: %s", job_id, e)
             db.set_status(job_id, "error", error=str(e))
 
+        db.prune_jobs(20)
         time.sleep(3)
 
 

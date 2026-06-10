@@ -11,6 +11,7 @@ import logging
 import os
 import secrets
 import sys
+from logging.handlers import RotatingFileHandler
 
 from flask import (
     Flask, redirect, render_template, request, session, url_for, jsonify, flash,
@@ -35,7 +36,7 @@ logging.basicConfig(
 log = logging.getLogger("translaitarr2")
 try:
     os.makedirs(cfgmod.CONFIG_DIR, exist_ok=True)
-    fh = logging.FileHandler(cfgmod.LOG_FILE)
+    fh = RotatingFileHandler(cfgmod.LOG_FILE, maxBytes=2_000_000, backupCount=3)
     fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(message)s", "%Y-%m-%d %H:%M:%S"))
     log.addHandler(fh)
 except OSError as e:  # config volume not writable yet — stdout still works
@@ -64,7 +65,7 @@ ASSET_VER = secrets.token_hex(4)
 
 PUBLIC_ENDPOINTS = {"health", "static", "login", "setup", "setup_submit"}
 # JS helper endpoints the setup wizard needs before a config/auth exists.
-WIZARD_API = {"arr_test", "gemini_models"}
+WIZARD_API = {"arr_test", "gemini_models", "gemini_test"}
 
 
 @app.before_request
@@ -209,6 +210,19 @@ def gemini_models():
 @app.route("/api/arr/rootfolders", methods=["POST"], endpoint="arr_rootfolders")
 def arr_rootfolders():
     return jsonify({"folders": arr.all_root_folders(cfgmod.load_config())})
+
+
+@app.route("/api/gemini/test", methods=["POST"], endpoint="gemini_test")
+def gemini_test():
+    data = request.get_json(silent=True) or request.form
+    key = (data.get("api_key") or "").strip() or cfgmod.load_config()["gemini"].get("api_key", "")
+    if not key:
+        return jsonify({"ok": False, "message": "Enter a Gemini API key first."})
+    try:
+        models = translator.list_available_models(key)
+        return jsonify({"ok": True, "message": f"Connected — {len(models)} models available"})
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"ok": False, "message": str(e)})
 
 
 _STATUS_CHIP = {"pending": "amber", "processing": "blue", "done": "green",
@@ -435,6 +449,7 @@ if __name__ == "__main__":
     log.info("translAItarr2 starting on port %s", port)
     log.info("=" * 56)
     db.init_db()
+    db.reset_stuck_jobs()
     worker.start()
     version.start()
     try:

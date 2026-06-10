@@ -7,7 +7,7 @@
     <thead><tr><th>Title</th><th>Status</th><th style="width:200px"></th></tr></thead>
     <tbody>
       {% for t in items %}
-      <tr>
+      <tr data-title="{{ t.title|lower }}" data-chip="{{ t.chip }}">
         <td>{{ t.title }}</td>
         <td><span class="chip {{ t.chip }}">{{ t.status }}</span></td>
         <td class="actions">
@@ -44,6 +44,15 @@
 <p class="sub">Downloaded titles from Sonarr &amp; Radarr and their subtitle status.</p>
 
 <div class="toolbar">
+  <input type="text" id="lib-search" placeholder="Search title…" style="max-width:240px">
+  <select id="lib-filter">
+    <option value="">All statuses</option>
+    <option value="amber">Needs translation</option>
+    <option value="green">Has target language</option>
+    <option value="blue">Translated</option>
+    <option value="red">No source</option>
+    <option value="gray">Other</option>
+  </select>
   <span class="spacer"></span>
   <form method="post" action="{{ url_for('rescan') }}" style="display:inline"><button class="btn" type="submit">Rescan</button></form>
   <form method="post" action="{{ url_for('translate_all') }}" style="display:inline"><button class="btn primary" type="submit">Translate all missing</button></form>
@@ -54,4 +63,21 @@
 
 <h2 class="sec">TV Shows <span class="hint">({{ episodes|length }})</span></h2>
 {{ lib_table(episodes) }}
+
+<script>
+(function () {
+  const q = document.getElementById("lib-search");
+  const f = document.getElementById("lib-filter");
+  function apply() {
+    const s = q.value.trim().toLowerCase(), c = f.value;
+    document.querySelectorAll("tbody tr[data-title]").forEach((tr) => {
+      const okS = !s || tr.dataset.title.includes(s);
+      const okC = !c || tr.dataset.chip === c;
+      tr.style.display = (okS && okC) ? "" : "none";
+    });
+  }
+  q.addEventListener("input", apply);
+  f.addEventListener("change", apply);
+})();
+</script>
 {% endblock %}
