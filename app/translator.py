@@ -179,6 +179,28 @@ def remove_sdh(src_path, dst_path, sdh):
 
 # ── Gemini ────────────────────────────────────────────────────────────────────
 
+def list_available_models(api_key):
+    """Query the Gemini API for models that support generateContent.
+
+    Returns a list of bare model ids (e.g. 'gemini-2.0-flash'). Flash-family
+    models are listed first (the ones this app actually uses), then the rest.
+    """
+    r = requests.get(
+        "https://generativelanguage.googleapis.com/v1beta/models",
+        headers={"x-goog-api-key": api_key}, timeout=10,
+    )
+    r.raise_for_status()
+    names = []
+    for m in r.json().get("models", []):
+        if "generateContent" in m.get("supportedGenerationMethods", []):
+            name = m.get("name", "").split("/")[-1]
+            if name:
+                names.append(name)
+    flash = [n for n in names if "flash" in n]
+    rest = [n for n in names if "flash" not in n]
+    return flash + rest
+
+
 def call_gemini_once(srt_path, src_lang, tgt_lang, model, cfg):
     """Single Gemini call. Returns (clean_srt_text, finish_reason). Raises GeminiError."""
     api_key = cfg["gemini"]["api_key"]

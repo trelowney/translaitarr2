@@ -1,0 +1,13 @@
+<label>Gemini models <span class="hint">— drag to reorder (top = highest priority); fallback tries them top-down</span></label>
+<ul class="model-list" id="model-list" data-target="models-field">
+  {% for m in cfg.gemini.models %}
+  <li data-model="{{ m }}"><span class="grip">&#10303;</span><span class="mname">{{ m }}</span><button type="button" class="x" title="Remove">&times;</button></li>
+  {% endfor %}
+</ul>
+<input type="hidden" name="models" id="models-field">
+<div class="model-add">
+  <input type="text" id="model-input" placeholder="add a model id…" autocomplete="off">
+  <button type="button" class="small" id="model-add-btn">Add</button>
+  <button type="button" class="small" id="model-refresh-btn">Fetch from API</button>
+  <span id="model-msg" class="hint"></span>
+</div>

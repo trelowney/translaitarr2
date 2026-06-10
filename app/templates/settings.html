@@ -25,18 +25,12 @@
     <h2>Gemini</h2>
     <label>API key <span class="hint">(leave blank to keep current)</span></label>
     <input type="password" name="gemini_api_key" placeholder="{{ '••••••••' if cfg.gemini.api_key else '' }}">
-    <label>Models <span class="hint">— one per line, tried in order on rate-limit</span></label>
-    <textarea name="gemini_models">{{ cfg.gemini.models | join('\n') }}</textarea>
+    {% include "partials/_models.html" %}
   </div>
 
   <div class="card">
     <h2>Languages</h2>
-    <label>Source priority <span class="hint">— ISO-639-2 codes, best first (e.g. eng fra deu spa)</span></label>
-    <input type="text" name="source_priority" value="{{ cfg.languages.source_priority | join(' ') }}">
-    <div class="row">
-      <div><label>Target name</label><input type="text" name="target_name" value="{{ cfg.languages.target.name }}"></div>
-      <div><label>Target code</label><input type="text" name="target_code" value="{{ cfg.languages.target.code }}"></div>
-    </div>
+    {% include "partials/_languages.html" %}
   </div>
 
   <div class="card">

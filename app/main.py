@@ -6,6 +6,7 @@ pages (Library / Queue / Settings). The *arr client, library scanner and the
 translation engine are wired in as those modules land; this file owns app
 bootstrapping, the setup wizard, and authentication.
 """
+import json
 import logging
 import os
 import secrets
@@ -19,6 +20,7 @@ import arr
 import config as cfgmod
 import db
 import scanner
+import translator
 import version
 import worker
 
@@ -56,6 +58,8 @@ except OSError:
 
 # Endpoints reachable without an active config / login.
 PUBLIC_ENDPOINTS = {"health", "static", "login", "setup", "setup_submit"}
+# JS helper endpoints the setup wizard needs before a config/auth exists.
+WIZARD_API = {"arr_test", "gemini_models"}
 
 
 @app.before_request
@@ -66,15 +70,15 @@ def gate():
 
     cfg = cfgmod.load_config()
     if not cfg.get("onboarding_completed"):
-        # First-run: the wizard's connectivity test is the only extra endpoint
-        # reachable before a config (and thus auth) exists.
-        if endpoint == "arr_test":
+        # First-run: wizard helper endpoints are reachable; everything else
+        # redirects into the wizard.
+        if endpoint in WIZARD_API:
             return None
         return redirect(url_for("setup"))
 
     if cfg.get("auth", {}).get("enabled") and not session.get("authed"):
-        # arr_test is fetched via JS — answer with JSON 401 instead of a redirect.
-        if endpoint == "arr_test":
+        # Wizard APIs are fetched via JS — answer JSON 401 instead of redirecting.
+        if endpoint in WIZARD_API:
             return jsonify({"ok": False, "message": "Authentication required"}), 401
         return redirect(url_for("login"))
     return None
@@ -84,6 +88,12 @@ def gate():
 def inject_version():
     # Cache-only read; the background thread does the GitHub fetch.
     return {"version": version.info()}
+
+
+@app.context_processor
+def inject_langs():
+    return {"source_languages": cfgmod.SOURCE_LANGUAGES,
+            "target_languages": cfgmod.TARGET_LANGUAGES}
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -131,15 +141,7 @@ def setup_submit():
     cfg["arr"]["radarr"]["api_key"] = f.get("radarr_api_key", "").strip()
     cfg["gemini"]["api_key"] = f.get("gemini_api_key", "").strip()
 
-    models = [m.strip() for m in f.get("gemini_models", "").splitlines() if m.strip()]
-    if models:
-        cfg["gemini"]["models"] = models
-
-    sources = [s.strip() for s in f.get("source_priority", "").replace(",", " ").split() if s.strip()]
-    if sources:
-        cfg["languages"]["source_priority"] = sources
-    cfg["languages"]["target"]["name"] = f.get("target_name", "Czech").strip() or "Czech"
-    cfg["languages"]["target"]["code"] = f.get("target_code", "cs").strip() or "cs"
+    _apply_lang_model_fields(cfg, f)
 
     if f.get("auth_enabled") == "on" and f.get("password"):
         cfg["auth"]["enabled"] = True
@@ -178,6 +180,18 @@ def arr_test():
     client_cls = arr.RadarrClient if service == "radarr" else arr.SonarrClient
     ok, message = client_cls(data.get("url", ""), data.get("api_key", "")).test()
     return jsonify({"ok": ok, "message": message})
+
+
+@app.route("/api/gemini/models", methods=["POST"], endpoint="gemini_models")
+def gemini_models():
+    data = request.get_json(silent=True) or request.form
+    key = (data.get("api_key") or "").strip() or cfgmod.load_config()["gemini"].get("api_key", "")
+    if not key:
+        return jsonify({"ok": False, "error": "Enter a Gemini API key first."}), 200
+    try:
+        return jsonify({"ok": True, "models": translator.list_available_models(key)})
+    except Exception as e:  # noqa: BLE001 - surface any API/network error to the UI
+        return jsonify({"ok": False, "error": str(e)}), 200
 
 
 _STATUS_CHIP = {"pending": "amber", "processing": "blue", "done": "green",
@@ -257,6 +271,29 @@ def _int(value, default):
         return default
 
 
+def _parse_models(raw):
+    try:
+        return [str(x).strip() for x in json.loads(raw) if str(x).strip()]
+    except (ValueError, TypeError):
+        return [m.strip() for m in (raw or "").replace(",", "\n").splitlines() if m.strip()]
+
+
+def _apply_lang_model_fields(cfg, f):
+    """Apply the clickable source langs (checkboxes), target lang (dropdown) and
+    drag-ordered models (hidden JSON) shared by the wizard and Settings."""
+    selected = set(f.getlist("source_priority"))
+    ordered = [code for code, _ in cfgmod.SOURCE_LANGUAGES if code in selected]
+    if ordered:
+        cfg["languages"]["source_priority"] = ordered
+    target_code = (f.get("target_code") or "").strip()
+    if target_code:
+        cfg["languages"]["target"]["code"] = target_code
+        cfg["languages"]["target"]["name"] = cfgmod.target_name_for(target_code)
+    models = _parse_models(f.get("models", ""))
+    if models:
+        cfg["gemini"]["models"] = models
+
+
 @app.route("/settings", methods=["POST"], endpoint="settings_save")
 def settings_save():
     cfg = cfgmod.load_config()
@@ -272,14 +309,7 @@ def settings_save():
     if f.get("gemini_api_key", "").strip():
         cfg["gemini"]["api_key"] = f["gemini_api_key"].strip()
 
-    models = [m.strip() for m in f.get("gemini_models", "").splitlines() if m.strip()]
-    if models:
-        cfg["gemini"]["models"] = models
-    sources = [s for s in f.get("source_priority", "").replace(",", " ").split() if s]
-    if sources:
-        cfg["languages"]["source_priority"] = sources
-    cfg["languages"]["target"]["name"] = f.get("target_name", "").strip() or "Czech"
-    cfg["languages"]["target"]["code"] = f.get("target_code", "").strip() or "cs"
+    _apply_lang_model_fields(cfg, f)
 
     cfg["automation"]["enabled"] = f.get("automation_enabled") == "on"
     cfg["automation"]["scan_interval_minutes"] = _int(f.get("scan_interval"), cfg["automation"]["scan_interval_minutes"])

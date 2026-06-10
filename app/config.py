@@ -32,13 +32,28 @@ DEFAULTS = {
     },
     "gemini": {
         "api_key": "",
-        "models": ["gemini-3-flash-preview", "gemini-2.0-flash", "gemini-2.0-flash-lite"],
-        # Per-model batch override (cues per request). Models not listed here use
-        # translation.batch_size. Lite models get a slightly smaller default batch.
+        # Full flash-family fallback order (newest -> oldest). On the free tier
+        # each model has its own daily quota, so the worker simply skips any that
+        # return 429/5xx and tries the next. Paid-only pro models are omitted.
+        "models": [
+            "gemini-3.1-flash-lite",
+            "gemini-3.5-flash",
+            "gemini-3-flash-preview",
+            "gemini-2.5-flash",
+            "gemini-flash-latest",
+            "gemini-2.5-flash-lite",
+            "gemini-flash-lite-latest",
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-lite",
+        ],
+        # Per-model batch override (cues per request). Models not listed fall back
+        # to translation.batch_size — that's where the smaller "lite" models land.
         "model_batch": {
+            "gemini-3.5-flash": 200,
             "gemini-3-flash-preview": 200,
+            "gemini-2.5-flash": 200,
+            "gemini-flash-latest": 200,
             "gemini-2.0-flash": 200,
-            "gemini-2.0-flash-lite": 150,
         },
     },
     "languages": {
@@ -73,6 +88,30 @@ DEFAULTS = {
 
 # Environment variable -> config path. Each also supports a *_FILE variant
 # pointing at a file (Docker secret) whose contents are used instead.
+# Source languages offered as clickable priority (canonical ISO-639-2 codes that
+# media.py can match against subtitle tracks), in default priority order.
+SOURCE_LANGUAGES = [
+    ("eng", "English"), ("fra", "French"), ("deu", "German"), ("spa", "Spanish"),
+    ("ita", "Italian"), ("por", "Portuguese"), ("pol", "Polish"), ("nld", "Dutch"),
+    ("rus", "Russian"),
+]
+
+# Target languages offered in the dropdown (code used for the sidecar filename).
+TARGET_LANGUAGES = [
+    ("cs", "Czech"), ("sk", "Slovak"), ("en", "English"), ("de", "German"),
+    ("fr", "French"), ("es", "Spanish"), ("it", "Italian"), ("pt", "Portuguese"),
+    ("pl", "Polish"), ("nl", "Dutch"), ("ru", "Russian"), ("uk", "Ukrainian"),
+    ("hu", "Hungarian"), ("ro", "Romanian"), ("hr", "Croatian"), ("sr", "Serbian"),
+    ("bg", "Bulgarian"), ("el", "Greek"), ("tr", "Turkish"), ("sv", "Swedish"),
+    ("da", "Danish"), ("fi", "Finnish"), ("no", "Norwegian"), ("ja", "Japanese"),
+    ("ko", "Korean"), ("zh", "Chinese"), ("ar", "Arabic"),
+]
+
+
+def target_name_for(code):
+    return dict(TARGET_LANGUAGES).get(code, code.upper())
+
+
 ENV_OVERRIDES = {
     "GEMINI_API_KEY": ("gemini", "api_key"),
     "SONARR_URL": ("arr", "sonarr", "url"),

@@ -8,7 +8,7 @@
   <form method="post" action="{{ url_for('setup_submit') }}">
     <div class="card">
       <div class="step-title">1 · Sonarr &amp; Radarr</div>
-      <p class="hint">Used to list your library with real titles. Leave a section blank if you don't run it.</p>
+      <p class="hint">Used to list your library with real titles. <strong>Fill in whichever you use — just one (only Sonarr, or only Radarr) is fine;</strong> leave the other blank.</p>
       <label>Sonarr URL</label>
       <input type="text" name="sonarr_url" value="{{ cfg.arr.sonarr.url }}" placeholder="http://sonarr:8989">
       <label>Sonarr API key</label>
@@ -31,18 +31,12 @@
       <div class="step-title">2 · Gemini</div>
       <label>API key</label>
       <input type="password" name="gemini_api_key" placeholder="AIza…">
-      <label>Models <span class="hint">— one per line, tried in order</span></label>
-      <textarea name="gemini_models">{{ cfg.gemini.models | join('\n') }}</textarea>
+      {% include "partials/_models.html" %}
     </div>
 
     <div class="card">
       <div class="step-title">3 · Languages</div>
-      <label>Source priority <span class="hint">— best first, ISO-639-2 (e.g. eng fra deu spa)</span></label>
-      <input type="text" name="source_priority" value="{{ cfg.languages.source_priority | join(' ') }}">
-      <div class="row">
-        <div><label>Target name</label><input type="text" name="target_name" value="{{ cfg.languages.target.name }}"></div>
-        <div><label>Target code</label><input type="text" name="target_code" value="{{ cfg.languages.target.code }}"></div>
-      </div>
+      {% include "partials/_languages.html" %}
     </div>
 
     <div class="card">

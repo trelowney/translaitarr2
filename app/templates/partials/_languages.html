@@ -1,0 +1,12 @@
+<label>Source languages <span class="hint">— tick the ones to translate from; order is the priority (English first)</span></label>
+<div class="lang-grid">
+  {% for code, name in source_languages %}
+  <label class="check"><input type="checkbox" name="source_priority" value="{{ code }}" {{ 'checked' if code in cfg.languages.source_priority }}><span>{{ name }}</span></label>
+  {% endfor %}
+</div>
+<label>Target language</label>
+<select name="target_code">
+  {% for code, name in target_languages %}
+  <option value="{{ code }}" {{ 'selected' if code == cfg.languages.target.code }}>{{ name }}</option>
+  {% endfor %}
+</select>

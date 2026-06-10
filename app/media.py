@@ -22,6 +22,11 @@ LANG_ALIASES = {
     "fr": "fra", "fre": "fra", "fra": "fra",
     "de": "deu", "ger": "deu", "deu": "deu",
     "es": "spa", "spa": "spa",
+    "it": "ita", "ita": "ita",
+    "pt": "por", "por": "por",
+    "pl": "pol", "pol": "pol",
+    "nl": "nld", "dut": "nld", "nld": "nld",
+    "ru": "rus", "rus": "rus",
     "cs": "cze", "cze": "cze", "ces": "cze",
 }
 
