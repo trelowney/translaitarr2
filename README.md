@@ -78,7 +78,7 @@ translAItarr2 is in **early development**. Rough plan:
 **Planned (later)**
 - **More translation providers** — [OpenRouter.ai](https://openrouter.ai/), DeepL,
   OpenAI-compatible / local models, Cloudflare Workers AI (choose your engine; Gemini stays the default)
-- UI translations (i18n), starting with Czech
+- UI translations (i18n) — only if the community asks for it; then community-driven via Weblate (the app stays English-first, like Bazarr/Lingarr)
 
 ## Quick start
 
