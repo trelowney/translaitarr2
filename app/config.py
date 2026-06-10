@@ -80,6 +80,9 @@ DEFAULTS = {
         "context_after": 2,
         "add_translator_credit": False,
         "batch_size": 150,
+        # 'video' = translate the subtitle inside the video (embedded/PGS);
+        # 'sidecar' = prefer an external source .srt next to it, then fall back.
+        "source_preference": "video",
     },
     "validation": {
         "enabled": True,

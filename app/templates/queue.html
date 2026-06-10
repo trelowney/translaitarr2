@@ -10,6 +10,7 @@
     <div class="hint">Gemini requests today: <strong>{{ usage.total }}</strong> / {{ usage.limit }}</div>
     {% if usage.per_model %}<div class="usage-models">{% for m, c in usage.per_model.items() %}<div>{{ m }} <span class="hint">— {{ c }}</span></div>{% endfor %}</div>{% endif %}
     <div class="usage-outcomes">✅ {{ usage.outcomes.translated }} translated · ⏭ {{ usage.outcomes.skipped }} skipped · ❌ {{ usage.outcomes.errors }} failed</div>
+    <div class="usage-sys hint">CPU {{ usage.system.cpu_pct if usage.system.cpu_pct is not none else '—' }}% · RAM {{ usage.system.ram_mb if usage.system.ram_mb is not none else '—' }} MB</div>
   </div>
 </div>
 
@@ -63,6 +64,8 @@
     if (keys.length) s += '<div class="usage-models">' + keys.map((m) => '<div>' + esc(m) + ' <span class="hint">— ' + pm[m] + '</span></div>').join("") + '</div>';
     const o = u.outcomes || { translated: 0, skipped: 0, errors: 0 };
     s += '<div class="usage-outcomes">✅ ' + o.translated + ' translated · ⏭ ' + o.skipped + ' skipped · ❌ ' + o.errors + ' failed</div>';
+    const sys = u.system || {};
+    s += '<div class="usage-sys hint">CPU ' + (sys.cpu_pct == null ? "—" : sys.cpu_pct) + '% · RAM ' + (sys.ram_mb == null ? "—" : sys.ram_mb) + ' MB</div>';
     return s;
   }
   function rowHtml(j) {

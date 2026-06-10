@@ -20,6 +20,7 @@ import arr
 import config as cfgmod
 import db
 import scanner
+import stats
 import translator
 import version
 import worker
@@ -243,6 +244,7 @@ def _queue_data():
         "limit": cfg["limits"].get("max_daily_total", 120),
         "per_model": db.today_per_model(),
         "outcomes": db.outcome_counts(),
+        "system": stats.container_stats(),
     }
     return jobs, usage, _log_tail()
 
@@ -395,6 +397,9 @@ def settings_save():
     cfg["validation"]["enabled"] = f.get("validation_enabled") == "on"
     for k in ("min_chars", "max_chars", "min_duration_ms", "max_duration_s"):
         cfg["validation"][k] = _int(f.get(k), cfg["validation"][k])
+
+    if f.get("source_preference") in ("video", "sidecar"):
+        cfg["translation"]["source_preference"] = f["source_preference"]
 
     cfgmod.save_config(cfg)
     # Auto-save (fetch) requests get a quiet 204; full form posts redirect.

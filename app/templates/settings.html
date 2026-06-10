@@ -60,7 +60,12 @@
 
   <div class="card">
     <h2>Translation</h2>
-    <div class="check"><input type="checkbox" checked disabled><span>Add a credit line to every subtitle — &ldquo;Translated by translAItarr2&rdquo; and the model used <span class="hint">(always on)</span></span></div>
+    <label>Subtitle source <span class="hint">— where to take the text to translate (movies &amp; episodes)</span></label>
+    <select name="source_preference">
+      <option value="video" {{ 'selected' if cfg.translation.source_preference == 'video' }}>From the video — embedded text / Blu-ray PGS (OCR)</option>
+      <option value="sidecar" {{ 'selected' if cfg.translation.source_preference == 'sidecar' }}>Prefer an external .srt next to the file, fall back to the video</option>
+    </select>
+    <div class="check" style="margin-top:14px"><input type="checkbox" checked disabled><span>Add a credit line to every subtitle — &ldquo;Translated by translAItarr2&rdquo; and the model used <span class="hint">(always on)</span></span></div>
     <p class="hint">Batch size is set per model in the Gemini section above.</p>
   </div>
 

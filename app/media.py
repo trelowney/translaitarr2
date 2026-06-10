@@ -128,6 +128,49 @@ def best_source_subtitle(streams, source_priority, target_code):
     return (kind, best.get("index"), _lang(best))
 
 
+def _code_variants(canon):
+    """All spelling variants (2-letter, 639-2/B, 639-2/T) for a canonical code."""
+    return [k for k, v in LANG_ALIASES.items() if v == canon] or [canon]
+
+
+def find_source_sidecar(path, source_priority, target_code):
+    """Look for an external source-language sidecar next to the video, e.g.
+    'Movie.en.srt' / 'Movie.eng.srt', in source-priority order. Returns
+    (srt_path, canonical_lang) or None. The target language is excluded; a bare
+    'Movie.srt' with no language tag is ignored (ambiguous)."""
+    stem = os.path.splitext(path)[0]
+    target = _norm(target_code)
+    for code in source_priority:
+        canon = _norm(code)
+        if canon == target:
+            continue
+        for variant in _code_variants(canon):
+            cand = f"{stem}.{variant}.srt"
+            if os.path.exists(cand):
+                return cand, canon
+    return None
+
+
+def select_source(path, cfg, streams=None):
+    """Pick the best source for translation, honouring source_preference:
+    'sidecar' = prefer an external .srt then fall back to the video; 'video' =
+    only the video's embedded/PGS subtitles. Returns a dict
+    {kind: 'sidecar'|'text'|'image', index, lang, path} or None."""
+    target = cfg["languages"]["target"]["code"]
+    source_priority = cfg["languages"]["source_priority"]
+    if cfg["translation"].get("source_preference", "video") == "sidecar":
+        sc = find_source_sidecar(path, source_priority, target)
+        if sc:
+            return {"kind": "sidecar", "index": None, "lang": sc[1], "path": sc[0]}
+    if streams is None:
+        streams = ffprobe_streams(path)
+    vid = best_source_subtitle(streams, source_priority, target)
+    if vid:
+        kind, index, lang = vid
+        return {"kind": kind, "index": index, "lang": lang, "path": None}
+    return None
+
+
 def classify(path, cfg):
     """Compute subtitle status for one video file.
 
@@ -152,24 +195,29 @@ def classify(path, cfg):
             return {"status": "Translated", "chip": "blue", "translatable": False, "reason": "sidecar"}
 
     streams = ffprobe_streams(path)
-    if has_target_audio(streams, target) or has_target_subtitle(streams, target):
-        return {"status": f"Has {target_name}", "chip": "green", "translatable": False, "reason": "embedded"}
+    has_aud = has_target_audio(streams, target)
+    has_sub = has_target_subtitle(streams, target)
+    if has_aud or has_sub:
+        kinds = " + ".join(p for p, ok in (("audio", has_aud), ("subtitles", has_sub)) if ok)
+        return {"status": f"Has {target_name} {kinds}", "chip": "green", "translatable": False, "reason": "embedded"}
 
-    src = best_source_subtitle(streams, cfg["languages"]["source_priority"], target)
+    src = select_source(path, cfg, streams)
     if src is None:
         return {"status": "No source subtitle", "chip": "red", "translatable": False, "reason": "no_source"}
 
-    kind, index, lang = src
+    kind = src["kind"]
     if sidecar_stale:
         status = "Needs re-translation (upgrade)"
     else:
-        status = "Needs translation" + (" (OCR)" if kind == "image" else "")
+        extra = " (OCR)" if kind == "image" else (" (sidecar)" if kind == "sidecar" else "")
+        status = "Needs translation" + extra
     return {
         "status": status,
         "chip": "amber",
         "translatable": True,
         "reason": "upgrade" if sidecar_stale else "translatable",
         "src_kind": kind,
-        "src_index": index,
-        "src_lang": lang,
+        "src_index": src["index"],
+        "src_lang": src["lang"],
+        "src_path": src["path"],
     }

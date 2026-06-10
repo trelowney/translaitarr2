@@ -482,29 +482,34 @@ def translate_file(file_path, cfg, force=False, usage=None):
 
     if force:
         # Re-translate regardless of skip rules; pick the best source directly.
-        streams = media.ffprobe_streams(file_path)
-        src = media.best_source_subtitle(streams, cfg["languages"]["source_priority"], target_code)
+        src = media.select_source(file_path, cfg)
         if src is None:
             raise RuntimeError("No source subtitle to translate from")
-        src_kind, stream_idx, src_lang_code = src
+        src_kind, stream_idx, src_lang_code, src_path = src["kind"], src["index"], src["lang"], src["path"]
     else:
         info = media.classify(file_path, cfg)
         if not info["translatable"]:
             log.info("Skip: %s", info["reason"])
             return f"skipped:{info['reason']}", {}
-        src_kind, stream_idx, src_lang_code = info["src_kind"], info["src_index"], info["src_lang"]
+        src_kind, stream_idx, src_lang_code, src_path = (
+            info["src_kind"], info["src_index"], info["src_lang"], info.get("src_path"))
 
     ocr_needed = src_kind == "image"
     src_lang = LANG_NAMES.get(src_lang_code, src_lang_code.upper())
-    log.info("Source: stream %s, lang=%s (%s)%s",
-             stream_idx, src_lang, src_lang_code, " [PGS -> OCR]" if ocr_needed else "")
+    where = " [PGS -> OCR]" if ocr_needed else (" [sidecar .srt]" if src_kind == "sidecar" else "")
+    log.info("Source: %s, lang=%s (%s)%s",
+             "external sidecar" if src_kind == "sidecar" else f"stream {stream_idx}",
+             src_lang, src_lang_code, where)
 
     out_srt = Path(file_path).with_suffix("")  # strip extension
     out_srt = out_srt.parent / f"{Path(file_path).stem}.{target_code}.srt"
 
     with tempfile.TemporaryDirectory(prefix="translaitarr2_") as tmp:
         raw_srt = os.path.join(tmp, "raw.srt")
-        if ocr_needed:
+        if src_kind == "sidecar":
+            shutil.copy2(src_path, raw_srt)
+            log.info("Source sidecar: %s (%s entries)", os.path.basename(src_path), count_entries(raw_srt))
+        elif ocr_needed:
             ocr_pgs_to_srt(file_path, stream_idx, src_lang_code, raw_srt, tmp)
         else:
             extract_subtitle(file_path, stream_idx, raw_srt)

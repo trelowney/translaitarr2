@@ -49,16 +49,15 @@ translAItarr2 is in **early development**. Rough plan:
 - Per-title, bulk and automatic translation; re-translate on release upgrade; manual re-translate
 - Google Gemini translation with model fallback, per-model batch sizes and per-model daily limits
 - Embedded-subtitle extraction and PGS (Blu-ray) OCR
-- Skip rules following your configured target language; SDH stripping; output validation
-- Setup wizard, optional password, auto-saving settings, live queue (usage + outcomes + log)
+- Selectable source: translate the **video's embedded subtitle** or **prefer an external `.srt`** next to it
+- Skip rules following your configured target language (shows whether a title already has target **audio**, **subtitles**, or both); SDH stripping; output validation
+- Setup wizard, optional password, auto-saving settings, live queue (usage + outcomes + CPU/RAM + log)
 - Path remapping (UI), in-app update check, multi-arch Docker image
 
 **Planned (later)**
 - **More translation providers** — [OpenRouter.ai](https://openrouter.ai/), DeepL,
   OpenAI-compatible / local models, Cloudflare Workers AI (choose your engine; Gemini stays the default)
-- **Use an existing external source `.srt`** as the source, with a sidecar-vs-embedded priority setting
 - Multiple target languages at once
-- Live CPU / RAM usage in the queue
 - Completion/failure notifications (webhook / email)
 - UI translations (i18n), starting with Czech
 - Context-aware translation (use surrounding lines for better coherence)
