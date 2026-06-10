@@ -109,6 +109,23 @@ def list_jobs(limit=50):
     return rows
 
 
+def delete_job(job_id):
+    conn = get_db()
+    conn.execute("DELETE FROM jobs WHERE id=?", (job_id,))
+    conn.commit()
+    conn.close()
+
+
+def clear_finished():
+    """Remove all done/error/skipped jobs. Returns how many were removed."""
+    conn = get_db()
+    conn.execute("DELETE FROM jobs WHERE status IN ('done', 'error')")
+    n = conn.total_changes
+    conn.commit()
+    conn.close()
+    return n
+
+
 def has_errored_job(path):
     """True if this file has a job in the 'error' state (so automation skips it
     and leaves it for a manual retry instead of looping)."""

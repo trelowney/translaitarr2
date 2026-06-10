@@ -207,16 +207,17 @@ _STATUS_CHIP = {"pending": "amber", "processing": "blue", "done": "green",
                 "error": "red", "skipped": "gray"}
 
 
-def _log_tail(n=80):
+def _log_tail(n=120):
+    """Last n log lines, newest first."""
     try:
         with open(cfgmod.LOG_FILE, encoding="utf-8", errors="replace") as f:
-            return "".join(f.readlines()[-n:]) or "No activity yet."
+            lines = f.readlines()[-n:]
+        return "".join(reversed(lines)) or "No activity yet."
     except OSError:
         return "No activity yet."
 
 
-@app.route("/queue")
-def queue():
+def _queue_data():
     cfg = cfgmod.load_config()
     jobs = []
     for j in db.list_jobs():
@@ -235,7 +236,19 @@ def queue():
         "limit": cfg["limits"].get("max_daily_total", 120),
         "per_model": db.today_per_model(),
     }
-    return render_template("queue.html", jobs=jobs, usage=usage, log=_log_tail(), active="queue")
+    return jobs, usage, _log_tail()
+
+
+@app.route("/queue")
+def queue():
+    jobs, usage, log = _queue_data()
+    return render_template("queue.html", jobs=jobs, usage=usage, log=log, active="queue")
+
+
+@app.route("/api/queue")
+def api_queue():
+    jobs, usage, log = _queue_data()
+    return jsonify({"jobs": jobs, "usage": usage, "log": log})
 
 
 @app.route("/translate", methods=["POST"])
@@ -265,6 +278,19 @@ def translate_all():
 def retry(job_id):
     db.retry(job_id)
     flash(f"Job {job_id} re-queued.")
+    return redirect(url_for("queue"))
+
+
+@app.route("/job/<int:job_id>/delete", methods=["POST"])
+def delete_job(job_id):
+    db.delete_job(job_id)
+    return ("", 204) if request.headers.get("X-Requested-With") == "fetch" else redirect(url_for("queue"))
+
+
+@app.route("/queue/clear", methods=["POST"])
+def clear_finished():
+    n = db.clear_finished()
+    flash(f"Cleared {n} finished job(s).")
     return redirect(url_for("queue"))
 
 

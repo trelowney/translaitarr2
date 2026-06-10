@@ -13,21 +13,38 @@ import subprocess
 
 log = logging.getLogger("translaitarr2")
 
-CZECH_CODES = {"cze", "ces", "cs"}
 IMAGE_CODECS = {"hdmv_pgs_subtitle", "dvd_subtitle"}
 
-# Normalise the many ISO-639 spellings to the codes used in source_priority.
+# Normalise the many ISO-639 spellings (2-letter, 639-2/B, 639-2/T) to one
+# canonical code per language, so target/source comparisons are robust.
 LANG_ALIASES = {
     "en": "eng", "eng": "eng",
-    "fr": "fra", "fre": "fra", "fra": "fra",
-    "de": "deu", "ger": "deu", "deu": "deu",
+    "cs": "cze", "cze": "cze", "ces": "cze",
+    "sk": "slk", "slk": "slk", "slo": "slk",
+    "de": "deu", "deu": "deu", "ger": "deu",
+    "fr": "fra", "fra": "fra", "fre": "fra",
     "es": "spa", "spa": "spa",
     "it": "ita", "ita": "ita",
     "pt": "por", "por": "por",
     "pl": "pol", "pol": "pol",
-    "nl": "nld", "dut": "nld", "nld": "nld",
+    "nl": "nld", "nld": "nld", "dut": "nld",
     "ru": "rus", "rus": "rus",
-    "cs": "cze", "cze": "cze", "ces": "cze",
+    "uk": "ukr", "ukr": "ukr",
+    "hu": "hun", "hun": "hun",
+    "ro": "ron", "ron": "ron", "rum": "ron",
+    "hr": "hrv", "hrv": "hrv",
+    "sr": "srp", "srp": "srp",
+    "bg": "bul", "bul": "bul",
+    "el": "ell", "ell": "ell", "gre": "ell",
+    "tr": "tur", "tur": "tur",
+    "sv": "swe", "swe": "swe",
+    "da": "dan", "dan": "dan",
+    "fi": "fin", "fin": "fin",
+    "no": "nor", "nor": "nor",
+    "ja": "jpn", "jpn": "jpn",
+    "ko": "kor", "kor": "kor",
+    "zh": "zho", "zho": "zho", "chi": "zho",
+    "ar": "ara", "ara": "ara",
 }
 
 
@@ -65,13 +82,15 @@ def _is_sdh(stream):
             or any(w in title for w in ("sdh", "hearing", "commentary")))
 
 
-def has_czech_audio(streams):
-    return any(s.get("codec_type") == "audio" and _lang(s) in CZECH_CODES for s in streams)
+def has_target_audio(streams, target_code):
+    t = _norm(target_code)
+    return any(s.get("codec_type") == "audio" and _lang(s) == t for s in streams)
 
 
-def has_czech_subtitle(streams):
-    """True for an embedded Czech subtitle — text OR image (PGS/VOBSUB)."""
-    return any(s.get("codec_type") == "subtitle" and _lang(s) in CZECH_CODES for s in streams)
+def has_target_subtitle(streams, target_code):
+    """True for an embedded target-language subtitle — text OR image (PGS/VOBSUB)."""
+    t = _norm(target_code)
+    return any(s.get("codec_type") == "subtitle" and _lang(s) == t for s in streams)
 
 
 def has_target_sidecar(path, target_code):
@@ -79,13 +98,15 @@ def has_target_sidecar(path, target_code):
     return os.path.exists(f"{stem}.{target_code}.srt")
 
 
-def best_source_subtitle(streams, source_priority):
+def best_source_subtitle(streams, source_priority, target_code):
     """Return (kind, index, lang) for the best translatable source subtitle, or
     None. ``kind`` is 'text' or 'image'. Prefers text over image, honours the
-    priority order, skips Czech/forced/SDH; non-prioritised languages rank last.
+    priority order, excludes the target language, deprioritises forced/SDH;
+    non-prioritised languages rank last.
     """
+    target = _norm(target_code)
     subs = [s for s in streams
-            if s.get("codec_type") == "subtitle" and _lang(s) not in CZECH_CODES]
+            if s.get("codec_type") == "subtitle" and _lang(s) != target]
     if not subs:
         return None
     prio = [_norm(code) for code in source_priority]
@@ -111,16 +132,17 @@ def classify(path, cfg):
     reason, and for translatable files the chosen source track.
     """
     target = cfg["languages"]["target"]["code"]
+    target_name = cfg["languages"]["target"].get("name") or target.upper()
     if not os.path.exists(path):
         return {"status": "File not found", "chip": "gray", "translatable": False, "reason": "missing"}
     if has_target_sidecar(path, target):
         return {"status": "Translated", "chip": "blue", "translatable": False, "reason": "sidecar"}
 
     streams = ffprobe_streams(path)
-    if has_czech_audio(streams) or has_czech_subtitle(streams):
-        return {"status": "Has Czech", "chip": "green", "translatable": False, "reason": "embedded"}
+    if has_target_audio(streams, target) or has_target_subtitle(streams, target):
+        return {"status": f"Has {target_name}", "chip": "green", "translatable": False, "reason": "embedded"}
 
-    src = best_source_subtitle(streams, cfg["languages"]["source_priority"])
+    src = best_source_subtitle(streams, cfg["languages"]["source_priority"], target)
     if src is None:
         return {"status": "No source subtitle", "chip": "red", "translatable": False, "reason": "no_source"}
 

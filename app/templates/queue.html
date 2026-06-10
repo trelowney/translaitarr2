@@ -2,27 +2,35 @@
 {% block title %}Queue · translAItarr2{% endblock %}
 {% block content %}
 <h1>Queue</h1>
-<p class="sub">What's translating right now, what's waiting, and today's usage.</p>
+<p class="sub">Live — updates automatically while jobs run.</p>
 
 <div class="card">
   <h2>Today</h2>
-  <div class="hint">Gemini requests today: <strong>{{ usage.total }}</strong> / {{ usage.limit }}{% if usage.per_model %}
+  <div class="hint" id="usage-line">Gemini requests today: <strong>{{ usage.total }}</strong> / {{ usage.limit }}{% if usage.per_model %}
     &nbsp;—&nbsp; {% for m, c in usage.per_model.items() %}{{ m }}&times;{{ c }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}</div>
+</div>
+
+<div class="toolbar">
+  <span class="spacer"></span>
+  <form method="post" action="{{ url_for('clear_finished') }}" style="display:inline"><button class="btn" type="submit">Clear finished</button></form>
 </div>
 
 <div class="card" style="padding:0">
   <table>
     <thead>
-      <tr><th>#</th><th>Title</th><th>Status</th><th>Detail</th><th style="width:90px"></th></tr>
+      <tr><th>#</th><th>Title</th><th>Status</th><th>Detail</th><th style="width:120px"></th></tr>
     </thead>
-    <tbody>
+    <tbody id="jobs-body">
       {% for j in jobs %}
       <tr>
         <td>{{ j.id }}</td>
         <td>{{ j.title }}</td>
         <td><span class="chip {{ j.chip }}">{{ j.status }}</span></td>
         <td class="hint">{{ j.detail }}</td>
-        <td>{% if j.status == 'error' %}<form method="post" action="{{ url_for('retry', job_id=j.id) }}" style="display:inline"><button class="small" type="submit">Retry</button></form>{% endif %}</td>
+        <td class="actions">
+          {% if j.status == 'error' %}<button class="small" data-act="retry" data-id="{{ j.id }}">Retry</button>{% endif %}
+          <button class="small xbtn" data-act="delete" data-id="{{ j.id }}" title="Remove">&times;</button>
+        </td>
       </tr>
       {% else %}
       <tr><td colspan="5" class="empty">Queue is empty.</td></tr>
@@ -32,7 +40,59 @@
 </div>
 
 <div class="card">
-  <h2>Live log</h2>
+  <h2>Live log <span class="hint">— newest first</span></h2>
   <div class="log" id="log">{{ log }}</div>
 </div>
+
+<script>
+(function () {
+  const usageEl = document.getElementById("usage-line");
+  const bodyEl = document.getElementById("jobs-body");
+  const logEl = document.getElementById("log");
+  let last = "";
+
+  function esc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : s; return d.innerHTML; }
+
+  function usageHtml(u) {
+    let s = 'Gemini requests today: <strong>' + u.total + '</strong> / ' + u.limit;
+    const pm = u.per_model || {};
+    const keys = Object.keys(pm);
+    if (keys.length) s += " — " + keys.map((m) => esc(m) + "×" + pm[m]).join(", ");
+    return s;
+  }
+  function rowHtml(j) {
+    const retry = j.status === "error" ? '<button class="small" data-act="retry" data-id="' + j.id + '">Retry</button> ' : "";
+    return '<tr><td>' + j.id + '</td><td>' + esc(j.title) + '</td>' +
+      '<td><span class="chip ' + j.chip + '">' + esc(j.status) + '</span></td>' +
+      '<td class="hint">' + esc(j.detail) + '</td>' +
+      '<td class="actions">' + retry +
+      '<button class="small xbtn" data-act="delete" data-id="' + j.id + '" title="Remove">×</button></td></tr>';
+  }
+  function render(d) {
+    const key = JSON.stringify(d);
+    if (key === last) return;
+    last = key;
+    usageEl.innerHTML = usageHtml(d.usage);
+    bodyEl.innerHTML = d.jobs.length
+      ? d.jobs.map(rowHtml).join("")
+      : '<tr><td colspan="5" class="empty">Queue is empty.</td></tr>';
+    logEl.textContent = d.log;
+  }
+  async function poll() {
+    try { const r = await fetch("{{ url_for('api_queue') }}"); if (r.ok) render(await r.json()); } catch (e) { /* keep polling */ }
+  }
+
+  bodyEl.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+    const url = btn.dataset.act === "retry" ? "/retry/" + btn.dataset.id : "/job/" + btn.dataset.id + "/delete";
+    btn.disabled = true;
+    try { await fetch(url, { method: "POST", headers: { "X-Requested-With": "fetch" } }); } catch (e) { /* ignore */ }
+    last = ""; poll();
+  });
+
+  poll();
+  setInterval(poll, 3000);
+})();
+</script>
 {% endblock %}

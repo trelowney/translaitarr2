@@ -41,6 +41,28 @@ translAItarr2 handles those cases:
 - **Privacy & safety first** — no telemetry; secrets stay in your local config
   volume; runs as a non-root user.
 
+## Roadmap
+
+translAItarr2 is in **early development**. Rough plan:
+
+**Working now**
+- Sonarr/Radarr library view with real titles; per-title and bulk translation; automation
+- Google Gemini translation with model fallback and per-model batch sizes
+- Embedded-subtitle extraction and PGS (Blu-ray) OCR
+- Skip rules following your configured target language (existing target-language audio / subtitle / sidecar) and SDH stripping
+- Setup wizard, optional password, auto-saving settings, live queue + log
+- In-app update check, multi-arch Docker image
+
+**Planned (later)**
+- **More translation providers** — [OpenRouter.ai](https://openrouter.ai/), DeepL,
+  OpenAI-compatible / local models, Cloudflare Workers AI (choose your engine; Gemini stays the default)
+- Re-translate when a release is upgraded (stale sidecar detection)
+- Path remapping in the UI (for setups where *arr paths ≠ the media mount)
+- Multiple target languages at once
+- Completion/failure notifications (webhook / email)
+- UI translations (i18n), starting with Czech
+- Context-aware translation (use surrounding lines for better coherence)
+
 ## Quick start
 
 ```bash

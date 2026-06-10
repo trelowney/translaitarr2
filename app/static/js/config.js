@@ -19,11 +19,17 @@
     if (notify) modelsField.dispatchEvent(new Event("change", { bubbles: true }));
   }
   function wire(li) {
+    const batch = li.querySelector(".mbatch");
     li.draggable = true;
     li.addEventListener("dragstart", () => { dragEl = li; li.classList.add("drag"); });
     li.addEventListener("dragend", () => { li.classList.remove("drag"); sync(true); });
     li.querySelector(".x").addEventListener("click", () => { li.remove(); sync(true); });
-    li.querySelector(".mbatch").addEventListener("input", () => sync(true));
+    batch.addEventListener("input", () => sync(true));
+    // The whole card drags, except the batch field — disable dragging while it's
+    // being used so its text stays selectable/editable.
+    batch.addEventListener("mousedown", () => { li.draggable = false; });
+    batch.addEventListener("mouseup", () => { li.draggable = true; });
+    batch.addEventListener("blur", () => { li.draggable = true; });
   }
   function exists(name) {
     return [...ul.querySelectorAll("li")].some((li) => li.dataset.model === name);
