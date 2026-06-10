@@ -44,8 +44,9 @@ translAItarr2 handles those cases:
   fallback between models, and adaptive batching with an untranslated-output check.
 - **Automation** — optional periodic scan that translates anything new; re-translate
   automatically on a release upgrade, or manually per-title.
-- **Optional back-translation verification** — sample a finished translation back to
-  the source language to flag dubious jobs; run it automatically or on demand.
+- **Optional translation verification** — samples a finished translation and has the
+  model check each line's meaning against the source, so it tolerates paraphrase and
+  flags only genuinely wrong / untranslated lines; run it automatically or on demand.
 - **Quality options** — SDH/caption stripping, output sanity validation (drops junk
   cues), and a credit line on every file.
 - **Live queue** — jobs, today's per-model usage, outcome tallies, container CPU/RAM
