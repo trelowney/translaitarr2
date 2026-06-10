@@ -61,6 +61,7 @@ translAItarr2 is in **early development**. Rough plan:
 - Completion/failure notifications (webhook / email)
 - UI translations (i18n), starting with Czech
 - Context-aware translation (use surrounding lines for better coherence)
+- Optional automatic **back-translation verification** (sample the result back to the source language and flag dubious jobs)
 
 ## Quick start
 

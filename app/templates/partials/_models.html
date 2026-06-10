@@ -1,6 +1,13 @@
 <label>Gemini models
   <span class="hint">— drag to reorder (top = highest priority). Per model: <b>batch</b> (cues/request) and <b>daily limit</b> (max requests/day; free tier ≈ 20)</span>
 </label>
+<div class="model-head">
+  <span class="grip" style="visibility:hidden">&#10303;</span>
+  <span class="mname">model</span>
+  <span class="mcol">batch</span>
+  <span class="mcol">limit/day</span>
+  <span class="spacer-x"></span>
+</div>
 <ul class="model-list" id="model-list" data-target="models-field" data-batch-target="model-batch-field" data-limit-target="model-limit-field">
   {% for m in cfg.gemini.models %}
   <li data-model="{{ m }}">

@@ -152,15 +152,25 @@
   const form = document.querySelector("form[data-autosave]");
   if (!form) return;
   const status = document.getElementById("save-status");
-  let timer = null;
+  let timer = null, toastEl = null, toastTimer = null;
   function show(text, color) { if (status) { status.textContent = text; status.style.color = color || ""; } }
+  function toast(msg, ok) {
+    if (!toastEl) { toastEl = document.createElement("div"); toastEl.className = "toast"; document.body.appendChild(toastEl); }
+    toastEl.textContent = msg;
+    toastEl.classList.toggle("ok", ok);
+    toastEl.classList.toggle("err", !ok);
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1800);
+  }
   async function save() {
     show("Saving…");
     try {
       const r = await fetch(form.action, { method: "POST", body: new FormData(form), headers: { "X-Requested-With": "fetch" } });
       if (!r.ok) throw new Error("HTTP " + r.status);
       show("✓ All changes saved · " + new Date().toLocaleTimeString(), "var(--green)");
-    } catch (e) { show("✗ Not saved: " + e, "var(--red)"); }
+      toast("✓ Settings saved", true);
+    } catch (e) { show("✗ Not saved: " + e, "var(--red)"); toast("✗ Not saved", false); }
   }
   function schedule() { clearTimeout(timer); timer = setTimeout(save, 600); }
   form.addEventListener("input", schedule);
