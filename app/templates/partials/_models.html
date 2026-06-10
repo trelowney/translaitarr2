@@ -1,19 +1,22 @@
 <label>Gemini models
-  <span class="hint">— drag to reorder (top = highest priority); set the batch (cues per request) per model; lite models do best with smaller batches</span>
+  <span class="hint">— drag to reorder (top = highest priority). Per model: <b>batch</b> (cues/request) and <b>daily limit</b> (max requests/day; free tier ≈ 20)</span>
 </label>
-<ul class="model-list" id="model-list" data-target="models-field" data-batch-target="model-batch-field">
+<ul class="model-list" id="model-list" data-target="models-field" data-batch-target="model-batch-field" data-limit-target="model-limit-field">
   {% for m in cfg.gemini.models %}
   <li data-model="{{ m }}">
     <span class="grip">&#10303;</span>
     <span class="mname">{{ m }}</span>
     <input type="number" class="mbatch" min="20" step="10" title="batch size (cues per request)"
            value="{{ cfg.gemini.model_batch.get(m, cfg.translation.batch_size) }}">
+    <input type="number" class="mlimit" min="1" title="daily request limit"
+           value="{{ cfg.gemini.model_daily_limit.get(m, cfg.limits.max_daily_per_model) }}">
     <button type="button" class="x" title="Remove">&times;</button>
   </li>
   {% endfor %}
 </ul>
 <input type="hidden" name="models" id="models-field">
 <input type="hidden" name="model_batch" id="model-batch-field">
+<input type="hidden" name="model_daily_limit" id="model-limit-field">
 <div class="model-add">
   <input type="text" id="model-input" placeholder="add a model id…" autocomplete="off">
   <button type="button" class="small" id="model-add-btn">Add</button>

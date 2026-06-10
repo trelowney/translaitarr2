@@ -186,6 +186,22 @@ def today_total():
     return row["count"] if row else 0
 
 
+def outcome_counts():
+    """Lifetime job outcome tally: translated / skipped / failed."""
+    conn = get_db()
+    rows = conn.execute("SELECT status, result FROM jobs").fetchall()
+    conn.close()
+    out = {"translated": 0, "skipped": 0, "errors": 0}
+    for r in rows:
+        if r["status"] == "error":
+            out["errors"] += 1
+        elif (r["result"] or "").startswith("skipped"):
+            out["skipped"] += 1
+        elif r["result"] == "translated":
+            out["translated"] += 1
+    return out
+
+
 def today_per_model():
     conn = get_db()
     rows = conn.execute("SELECT model, count FROM model_daily_calls WHERE day=?", (_today(),)).fetchall()

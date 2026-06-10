@@ -101,6 +101,15 @@ class _ArrClient:
         except ArrError as e:
             return False, str(e)
 
+    def root_folders(self):
+        """The library root paths configured in this *arr (as it sees them)."""
+        if not self.configured:
+            return []
+        try:
+            return [r["path"] for r in self._get("rootfolder") if r.get("path")]
+        except ArrError:
+            return []
+
     def list_titles(self):  # pragma: no cover - overridden
         raise NotImplementedError
 
@@ -170,6 +179,17 @@ def clients_from_config(cfg):
     radarr = RadarrClient(arr.get("radarr", {}).get("url"), arr.get("radarr", {}).get("api_key"))
     sonarr = SonarrClient(arr.get("sonarr", {}).get("url"), arr.get("sonarr", {}).get("api_key"))
     return radarr, sonarr
+
+
+def all_root_folders(cfg):
+    """Merged, de-duplicated library root paths from both *arr services."""
+    seen, out = set(), []
+    for client in clients_from_config(cfg):
+        for p in client.root_folders():
+            if p not in seen:
+                seen.add(p)
+                out.append(p)
+    return out
 
 
 def list_all_titles(cfg):

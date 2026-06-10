@@ -21,8 +21,7 @@ that already exist on disk. They can't help when the only English subtitle is
 **embedded inside the MKV** or is a **PGS bitmap** (common on Blu-ray rips).
 translAItarr2 handles those cases:
 
-- ✅ Translates existing sidecar `.srt`
-- ✅ Extracts and translates **embedded** text subtitles
+- ✅ Extracts and translates **embedded** text subtitles from the video
 - ✅ **OCRs PGS** (Blu-ray bitmap) subtitles to text, then translates
 - ✅ Skips files that **already have** your target language (audio, embedded sub, or sidecar)
 - ✅ Picks the best source language by your configured priority (e.g. English first, then French, German, Spanish…)
@@ -46,19 +45,20 @@ translAItarr2 handles those cases:
 translAItarr2 is in **early development**. Rough plan:
 
 **Working now**
-- Sonarr/Radarr library view with real titles; per-title and bulk translation; automation
-- Google Gemini translation with model fallback and per-model batch sizes
+- Sonarr/Radarr library view with real titles, grouped into Movies / TV Shows
+- Per-title, bulk and automatic translation; re-translate on release upgrade; manual re-translate
+- Google Gemini translation with model fallback, per-model batch sizes and per-model daily limits
 - Embedded-subtitle extraction and PGS (Blu-ray) OCR
-- Skip rules following your configured target language (existing target-language audio / subtitle / sidecar) and SDH stripping
-- Setup wizard, optional password, auto-saving settings, live queue + log
-- In-app update check, multi-arch Docker image
+- Skip rules following your configured target language; SDH stripping; output validation
+- Setup wizard, optional password, auto-saving settings, live queue (usage + outcomes + log)
+- Path remapping (UI), in-app update check, multi-arch Docker image
 
 **Planned (later)**
 - **More translation providers** — [OpenRouter.ai](https://openrouter.ai/), DeepL,
   OpenAI-compatible / local models, Cloudflare Workers AI (choose your engine; Gemini stays the default)
-- Re-translate when a release is upgraded (stale sidecar detection)
-- Path remapping in the UI (for setups where *arr paths ≠ the media mount)
+- **Use an existing external source `.srt`** as the source, with a sidecar-vs-embedded priority setting
 - Multiple target languages at once
+- Live CPU / RAM usage in the queue
 - Completion/failure notifications (webhook / email)
 - UI translations (i18n), starting with Czech
 - Context-aware translation (use surrounding lines for better coherence)
@@ -125,6 +125,9 @@ every field. Highlights:
 | Validation  | Min/max cue length and duration sanity checks on the output.            |
 
 ### Recommended Gemini models & batch size
+
+> translAItarr2 is developed and **tested primarily against Gemini's free-tier**
+> flash models — the defaults and limits are tuned for that.
 
 translAItarr2 sends subtitles to Gemini in **batches** (N cues per request) and tries
 your models top-to-bottom, falling back to the next one when a model is rate-limited.

@@ -55,6 +55,10 @@ DEFAULTS = {
             "gemini-flash-latest": 200,
             "gemini-2.0-flash": 200,
         },
+        # Per-model daily request cap. Models not listed fall back to
+        # limits.max_daily_per_model. The worker skips a model once its count
+        # for the day reaches this.
+        "model_daily_limit": {},
     },
     "languages": {
         "source_priority": ["eng", "fra", "deu", "spa"],

@@ -1,29 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Library · translAItarr2{% endblock %}
-{% block content %}
-<h1>Library</h1>
-<p class="sub">Downloaded titles from Sonarr &amp; Radarr and their subtitle status.</p>
 
-<div class="toolbar">
-  <select id="filter">
-    <option value="all">All titles</option>
-    <option value="missing">Missing target language</option>
-  </select>
-  <span class="spacer"></span>
-  <form method="post" action="{{ url_for('rescan') }}" style="display:inline"><button class="btn" type="submit">Rescan</button></form>
-  <form method="post" action="{{ url_for('translate_all') }}" style="display:inline"><button class="btn primary" type="submit">Translate all missing</button></form>
-</div>
-
+{% macro lib_table(items) %}
 <div class="card" style="padding:0">
   <table>
-    <thead>
-      <tr><th>Title</th><th>Type</th><th>Status</th><th style="width:120px"></th></tr>
-    </thead>
+    <thead><tr><th>Title</th><th>Status</th><th style="width:140px"></th></tr></thead>
     <tbody>
-      {% for t in titles %}
+      {% for t in items %}
       <tr>
         <td>{{ t.title }}</td>
-        <td>{{ t.kind }}</td>
         <td><span class="chip {{ t.chip }}">{{ t.status }}</span></td>
         <td>
           {% if t.translatable %}
@@ -41,11 +26,26 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="4" class="empty">
-        No titles yet. Finish setup, connect Sonarr/Radarr, then run a scan.
-      </td></tr>
+      <tr><td colspan="3" class="empty">Nothing here yet.</td></tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
+{% endmacro %}
+
+{% block content %}
+<h1>Library</h1>
+<p class="sub">Downloaded titles from Sonarr &amp; Radarr and their subtitle status.</p>
+
+<div class="toolbar">
+  <span class="spacer"></span>
+  <form method="post" action="{{ url_for('rescan') }}" style="display:inline"><button class="btn" type="submit">Rescan</button></form>
+  <form method="post" action="{{ url_for('translate_all') }}" style="display:inline"><button class="btn primary" type="submit">Translate all missing</button></form>
+</div>
+
+<h2 class="sec">Movies <span class="hint">({{ movies|length }})</span></h2>
+{{ lib_table(movies) }}
+
+<h2 class="sec">TV Shows <span class="hint">({{ episodes|length }})</span></h2>
+{{ lib_table(episodes) }}
 {% endblock %}

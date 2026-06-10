@@ -55,7 +55,8 @@ def _loop():
         log.info("Job %s: starting — %s", job_id, title or path)
         db.set_status(job_id, "processing")
         try:
-            outcome, model_calls = translator.translate_file(path, cfg, force=force)
+            usage = db.today_per_model()
+            outcome, model_calls = translator.translate_file(path, cfg, force=force, usage=usage)
             if outcome == "translated":
                 total = db.record_calls(model_calls)
                 db.set_status(job_id, "done", result="translated")

@@ -6,8 +6,11 @@
 
 <div class="card">
   <h2>Today</h2>
-  <div class="hint" id="usage-line">Gemini requests today: <strong>{{ usage.total }}</strong> / {{ usage.limit }}{% if usage.per_model %}
-    &nbsp;—&nbsp; {% for m, c in usage.per_model.items() %}{{ m }}&times;{{ c }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}</div>
+  <div id="usage-line">
+    <div class="hint">Gemini requests today: <strong>{{ usage.total }}</strong> / {{ usage.limit }}</div>
+    {% if usage.per_model %}<div class="usage-models">{% for m, c in usage.per_model.items() %}<div>{{ m }} <span class="hint">— {{ c }}</span></div>{% endfor %}</div>{% endif %}
+    <div class="usage-outcomes">✅ {{ usage.outcomes.translated }} translated · ⏭ {{ usage.outcomes.skipped }} skipped · ❌ {{ usage.outcomes.errors }} failed</div>
+  </div>
 </div>
 
 <div class="toolbar">
@@ -54,10 +57,12 @@
   function esc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : s; return d.innerHTML; }
 
   function usageHtml(u) {
-    let s = 'Gemini requests today: <strong>' + u.total + '</strong> / ' + u.limit;
+    let s = '<div class="hint">Gemini requests today: <strong>' + u.total + '</strong> / ' + u.limit + '</div>';
     const pm = u.per_model || {};
     const keys = Object.keys(pm);
-    if (keys.length) s += " — " + keys.map((m) => esc(m) + "×" + pm[m]).join(", ");
+    if (keys.length) s += '<div class="usage-models">' + keys.map((m) => '<div>' + esc(m) + ' <span class="hint">— ' + pm[m] + '</span></div>').join("") + '</div>';
+    const o = u.outcomes || { translated: 0, skipped: 0, errors: 0 };
+    s += '<div class="usage-outcomes">✅ ' + o.translated + ' translated · ⏭ ' + o.skipped + ' skipped · ❌ ' + o.errors + ' failed</div>';
     return s;
   }
   function rowHtml(j) {

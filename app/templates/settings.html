@@ -43,10 +43,10 @@
   <div class="card">
     <h2>Limits</h2>
     <div class="row">
-      <div><label>Per-model / day</label><input type="number" name="max_daily_per_model" value="{{ cfg.limits.max_daily_per_model }}"></div>
-      <div><label>Total / day</label><input type="number" name="max_daily_total" value="{{ cfg.limits.max_daily_total }}"></div>
-      <div><label>Max per run</label><input type="number" name="max_per_run" value="{{ cfg.limits.max_per_run }}"></div>
+      <div><label>Total requests / day</label><input type="number" name="max_daily_total" value="{{ cfg.limits.max_daily_total }}"></div>
+      <div><label>Max titles per automation run</label><input type="number" name="max_per_run" value="{{ cfg.limits.max_per_run }}"></div>
     </div>
+    <p class="hint">Per-model daily limits are set per model in the Gemini section above.</p>
   </div>
 
   <div class="card">
@@ -78,10 +78,17 @@
   </div>
 
   <div class="card">
-    <h2>Path mapping <span class="hint">— optional</span></h2>
-    <p class="hint">Only needed if Sonarr/Radarr report paths that differ from where this app sees the media. One rule per line: <code>arr_path =&gt; local_path</code> (e.g. <code>/movies =&gt; /data/movies</code>).</p>
-    <textarea name="path_remap" placeholder="/movies =&gt; /data/movies">{% for r in cfg.paths.remap %}{{ r['from'] }} => {{ r['to'] }}
-{% endfor %}</textarea>
+    <h2>Path mapping <span class="hint">— only if files can't be found</span></h2>
+    <p class="hint">These are the folders Sonarr/Radarr use (left). Tell translAItarr2 where each one lives on its side (right). If they're identical — the usual case — just leave them.</p>
+    <table class="remap-table" id="remap-table" data-current='{{ cfg.paths.remap | tojson }}'>
+      <thead><tr><th>Sonarr/Radarr folder</th><th>Folder in translAItarr2</th></tr></thead>
+      <tbody id="remap-body"><tr><td colspan="2" class="hint" style="padding:12px">Detecting…</td></tr></tbody>
+    </table>
+    <input type="hidden" name="path_remap" id="remap-field">
+    <div class="model-add" style="margin-top:10px">
+      <button type="button" class="small" id="remap-detect">Detect folders</button>
+      <span id="remap-msg" class="hint"></span>
+    </div>
   </div>
 
 </form>

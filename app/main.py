@@ -172,7 +172,9 @@ def library():
     rows, errors = scanner.scan(cfgmod.load_config())
     for e in errors:
         flash(e)
-    return render_template("library.html", titles=rows, active="library")
+    movies = [r for r in rows if r["kind"] == "Movie"]
+    episodes = [r for r in rows if r["kind"] == "Episode"]
+    return render_template("library.html", movies=movies, episodes=episodes, active="library")
 
 
 @app.route("/rescan", methods=["POST"])
@@ -201,6 +203,11 @@ def gemini_models():
         return jsonify({"ok": True, "models": translator.list_available_models(key)})
     except Exception as e:  # noqa: BLE001 - surface any API/network error to the UI
         return jsonify({"ok": False, "error": str(e)}), 200
+
+
+@app.route("/api/arr/rootfolders", methods=["POST"], endpoint="arr_rootfolders")
+def arr_rootfolders():
+    return jsonify({"folders": arr.all_root_folders(cfgmod.load_config())})
 
 
 _STATUS_CHIP = {"pending": "amber", "processing": "blue", "done": "green",
@@ -235,6 +242,7 @@ def _queue_data():
         "total": db.today_total(),
         "limit": cfg["limits"].get("max_daily_total", 120),
         "per_model": db.today_per_model(),
+        "outcomes": db.outcome_counts(),
     }
     return jobs, usage, _log_tail()
 
@@ -338,6 +346,14 @@ def _apply_lang_model_fields(cfg, f):
         cfg["gemini"]["model_batch"] = {
             m: _int(raw_batch[m], cfg["translation"]["batch_size"])
             for m in models if m in raw_batch
+        }
+        try:
+            raw_limit = json.loads(f.get("model_daily_limit", "{}"))
+        except (ValueError, TypeError):
+            raw_limit = {}
+        cfg["gemini"]["model_daily_limit"] = {
+            m: _int(raw_limit[m], cfg["limits"]["max_daily_per_model"])
+            for m in models if m in raw_limit
         }
 
 
