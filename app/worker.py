@@ -64,13 +64,14 @@ def _loop():
         db.set_status(job_id, "processing")
         try:
             usage = db.today_per_model()
+            fails = {}
             if action == "verify":
                 vres, model_calls = translator.verify_translation(path, cfg, usage=usage)
                 db.record_calls(model_calls)
                 db.set_status(job_id, "done", result=_verify_label(vres))
                 log.info("Job %s: %s", job_id, _verify_label(vres))
             else:
-                outcome, model_calls = translator.translate_file(path, cfg, force=force, usage=usage)
+                outcome, model_calls = translator.translate_file(path, cfg, force=force, usage=usage, fails=fails)
                 if outcome == "translated":
                     extra = ""
                     if cfg["translation"].get("verify"):
@@ -79,6 +80,7 @@ def _loop():
                             model_calls[m] = model_calls.get(m, 0) + n
                         extra = " · " + _verify_label(vres)
                     total = db.record_calls(model_calls)
+                    db.record_fails(fails)
                     db.set_status(job_id, "done", result="translated" + extra)
                     log.info("Job %s: done (today %s/%s)", job_id, total, max_total)
                 else:

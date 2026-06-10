@@ -294,9 +294,10 @@ def call_gemini_once(srt_path, src_lang, tgt_lang, model, cfg):
     return clean, finish
 
 
-def call_gemini_with_fallback(srt_path, src_lang, tgt_lang, cfg, usage):
+def call_gemini_with_fallback(srt_path, src_lang, tgt_lang, cfg, usage, fails):
     """Try each configured model in order; skip any that has reached its daily
-    limit, fall back on 5xx/429/000. Mutates ``usage`` (model -> calls today)."""
+    limit, fall back on 5xx/429/000. Mutates ``usage`` (successful calls/model) and
+    ``fails`` (failed batch attempts/model)."""
     order = cfg["gemini"].get("models") or DEFAULT_MODELS
     default_limit = cfg["limits"].get("max_daily_per_model", 18)
     per_model = cfg["gemini"].get("model_daily_limit", {})
@@ -315,6 +316,7 @@ def call_gemini_with_fallback(srt_path, src_lang, tgt_lang, cfg, usage):
         except GeminiError as e:
             last_err = e
             if e.http_code in ("500", "502", "503", "504", "429", "000"):
+                fails[model] = fails.get(model, 0) + 1
                 log.warning("Model %s unavailable (%s), trying next", model, e.http_code)
                 continue
             raise
@@ -345,7 +347,7 @@ def _quality_ok(batch, returned):
     return True
 
 
-def _translate_all(srt_path, src_lang, tgt_lang, cfg, tmp, usage):
+def _translate_all(srt_path, src_lang, tgt_lang, cfg, tmp, usage, fails):
     """Translate in adaptive chunks. Returns (trl_map, last_model, src_entries, model_calls)."""
     src_entries = parse_srt(srt_path)
     trl_map, model_calls = {}, {}
@@ -373,7 +375,7 @@ def _translate_all(srt_path, src_lang, tgt_lang, cfg, tmp, usage):
             log.info("Retry %s: %s entries", attempt, len(batch))
 
         try:
-            translated_text, model, finish = call_gemini_with_fallback(chunk_path, src_lang, tgt_lang, cfg, usage)
+            translated_text, model, finish = call_gemini_with_fallback(chunk_path, src_lang, tgt_lang, cfg, usage, fails)
         except (GeminiError, AllModelsExhaustedError) as e:
             log.warning("Attempt %s: all models failed (%s) — halving batch", attempt, e)
             send_count = max(50, len(batch) // 2)
@@ -467,13 +469,14 @@ def prepend_credit(srt_path, model):
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
-def translate_file(file_path, cfg, force=False, usage=None):
+def translate_file(file_path, cfg, force=False, usage=None, fails=None):
     """Translate one video file's best source subtitle to the target language.
 
     Returns (outcome, model_calls). outcome is 'translated' or 'skipped:<reason>'.
     Raises RuntimeError on unrecoverable problems (no source, extraction failure).
     """
     usage = usage if usage is not None else {}
+    fails = fails if fails is not None else {}
     target_code = cfg["languages"]["target"]["code"]
     target_lang = cfg["languages"]["target"]["name"]
 
@@ -529,7 +532,7 @@ def translate_file(file_path, cfg, force=False, usage=None):
             srt_to_send = valid_srt
 
         trl_map, used_model, src_entries, model_calls = _translate_all(
-            srt_to_send, src_lang, target_lang, cfg, tmp, usage)
+            srt_to_send, src_lang, target_lang, cfg, tmp, usage, fails)
 
         merged_srt = os.path.join(tmp, "merged.srt")
         missing = 0

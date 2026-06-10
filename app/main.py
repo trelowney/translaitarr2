@@ -256,7 +256,7 @@ def _queue_data():
     usage = {
         "total": db.today_total(),
         "limit": cfg["limits"].get("max_daily_total", 120),
-        "per_model": db.today_per_model(),
+        "per_model": db.today_model_stats(),
         "outcomes": db.outcome_counts(),
         "system": stats.container_stats(),
     }

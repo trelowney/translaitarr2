@@ -50,13 +50,15 @@ def init_db():
             day   TEXT NOT NULL,
             model TEXT NOT NULL,
             count INTEGER DEFAULT 0,
+            fails INTEGER DEFAULT 0,
             PRIMARY KEY (day, model)
         );
         """
     )
     # Migrate DBs created before the 'force' column existed.
     for ddl in ("ALTER TABLE jobs ADD COLUMN force INTEGER DEFAULT 0",
-                "ALTER TABLE jobs ADD COLUMN action TEXT DEFAULT 'translate'"):
+                "ALTER TABLE jobs ADD COLUMN action TEXT DEFAULT 'translate'",
+                "ALTER TABLE model_daily_calls ADD COLUMN fails INTEGER DEFAULT 0"):
         try:
             conn.execute(ddl)
         except sqlite3.OperationalError:
@@ -230,11 +232,35 @@ def outcome_counts():
     return out
 
 
+def record_fails(model_fails):
+    """Per-model count of failed batch attempts (429/5xx/network) for today."""
+    conn = get_db()
+    for model, n in model_fails.items():
+        if not n:
+            continue
+        conn.execute(
+            """INSERT INTO model_daily_calls (day, model, count, fails) VALUES (?, ?, 0, ?)
+               ON CONFLICT(day, model) DO UPDATE SET fails = fails + excluded.fails""",
+            (_today(), model, n),
+        )
+    conn.commit()
+    conn.close()
+
+
 def today_per_model():
+    """Successful call count per model today (used for the per-model daily limit)."""
     conn = get_db()
     rows = conn.execute("SELECT model, count FROM model_daily_calls WHERE day=?", (_today(),)).fetchall()
     conn.close()
     return {r["model"]: r["count"] for r in rows}
+
+
+def today_model_stats():
+    """Per-model {ok, fail} batch counts today, for display."""
+    conn = get_db()
+    rows = conn.execute("SELECT model, count, fails FROM model_daily_calls WHERE day=?", (_today(),)).fetchall()
+    conn.close()
+    return {r["model"]: {"ok": r["count"], "fail": r["fails"]} for r in rows}
 
 
 def seconds_until_reset(tz_name="UTC"):
