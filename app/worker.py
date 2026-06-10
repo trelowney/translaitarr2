@@ -21,8 +21,8 @@ _started = False
 def _verify_label(r):
     if r.get("ok"):
         return f"verify ✓ ({r.get('checked', 0)} cues)"
-    if "leftover" in r or "bad" in r:
-        return f"verify ⚠ {r.get('leftover', 0) + r.get('bad', 0)} issue(s)"
+    if "bad" in r:
+        return f"verify ⚠ {r.get('bad', 0)} issue(s)"
     return "verify: " + r.get("note", "failed")
 
 

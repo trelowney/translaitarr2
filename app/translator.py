@@ -628,12 +628,18 @@ def verify_translation(video_path, cfg, usage=None):
         if not aligned:
             return {"ok": False, "note": "could not align subtitles by timecode"}, {}
 
-        # Reliable structural check: source-language text left untranslated.
-        leftover = sum(1 for en, cs in aligned if len(en) > 15 and cs.lower() == en.lower())
-
+        # Lines whose "translation" is identical to the source are prime suspects for
+        # untranslated text — but also legitimately identical proper names ("Karl
+        # Allen Gibbs"), so don't count them outright: feed them to the judge first
+        # and let it decide. The rest of the sample is spread across the file.
+        identical = [a for a in aligned if len(a[0]) > 15 and a[1].lower() == a[0].lower()]
         long_pairs = [a for a in aligned if len(a[0]) > 15]
         n = min(int(cfg["translation"].get("verify_samples", 8)), len(long_pairs))
-        sample = [long_pairs[i * len(long_pairs) // n] for i in range(n)] if n else []
+        sample = list(identical[:n])
+        rest = [a for a in long_pairs if a not in identical]
+        need = n - len(sample)
+        if need > 0 and rest:
+            sample += [rest[i * len(rest) // need] for i in range(need)]
 
         model_calls, bad = {}, 0
         if sample:
@@ -651,7 +657,7 @@ def verify_translation(video_path, cfg, usage=None):
             try:
                 text, model_calls = _judge(prompt, cfg, usage)
             except (GeminiError, AllModelsExhaustedError) as e:
-                return {"ok": False, "checked": len(aligned), "leftover": leftover,
+                return {"ok": False, "checked": len(aligned),
                         "note": f"verification call failed: {e}"}, model_calls
             m = re.search(r"\[[\d,\s]*\]", text)
             try:
@@ -659,9 +665,8 @@ def verify_translation(video_path, cfg, usage=None):
             except ValueError:
                 bad = 0
 
-        issues = leftover + bad
-        ok = issues == 0
-        log.info("Verify: %s aligned · untranslated=%s · mistranslated=%s/%s -> %s",
-                 len(aligned), leftover, bad, len(sample), "OK" if ok else f"{issues} ISSUE(S)")
-        return {"ok": ok, "checked": len(aligned), "leftover": leftover,
+        ok = bad == 0
+        log.info("Verify: %s aligned · %s identical-to-source · %s flagged of %s sampled -> %s",
+                 len(aligned), len(identical), bad, len(sample), "OK" if ok else f"{bad} ISSUE(S)")
+        return {"ok": ok, "checked": len(aligned), "identical": len(identical),
                 "bad": bad, "samples": len(sample)}, model_calls
