@@ -75,7 +75,6 @@ translAItarr2 is in **early development**. Rough plan:
 - Multiple target languages at once
 - Completion/failure notifications (webhook / email)
 - UI translations (i18n), starting with Czech
-- Context-aware translation (use surrounding lines for better coherence)
 
 ## Quick start
 
