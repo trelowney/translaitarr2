@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}What's New · translAItarr2{% endblock %}
+{% block content %}
+<h1>What's New</h1>
+<p class="sub">Release history — you're running v{{ current }}.</p>
+
+{% for r in releases %}
+<div class="card">
+  <h2 style="display:flex;align-items:center;gap:10px">
+    {{ r.tag or r.name }}
+    {% if (r.tag or '')|replace('v','') == current %}<span class="chip green">running</span>{% endif %}
+    <span class="hint" style="font-weight:400">{{ r.date }}</span>
+    {% if r.url %}<a href="{{ r.url }}" target="_blank" rel="noopener" class="hint" style="margin-left:auto;font-weight:400">on GitHub →</a>{% endif %}
+  </h2>
+  <div class="changelog">{{ r.body | md }}</div>
+</div>
+{% else %}
+<div class="card"><p class="hint">No releases published yet.</p></div>
+{% endfor %}
+{% endblock %}

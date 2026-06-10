@@ -61,6 +61,33 @@ def check(force=False):
     return info()
 
 
+_releases = {"checked": 0.0, "items": []}
+
+
+def list_releases(force=False):
+    """All published releases (newest first), cached. For the What's New page."""
+    now = time.time()
+    if not force and _releases["items"] and now - _releases["checked"] < CHECK_INTERVAL:
+        return _releases["items"]
+    _releases["checked"] = now
+    try:
+        r = requests.get(
+            f"https://api.github.com/repos/{REPO}/releases",
+            headers={"Accept": "application/vnd.github+json"},
+            params={"per_page": 30}, timeout=8,
+        )
+        if r.status_code == 200:
+            _releases["items"] = [
+                {"tag": x.get("tag_name"), "name": x.get("name"),
+                 "body": x.get("body") or "", "date": (x.get("published_at") or "")[:10],
+                 "url": x.get("html_url")}
+                for x in r.json() if not x.get("draft")
+            ]
+    except requests.RequestException as e:
+        log.warning("Release list fetch failed: %s", e)
+    return _releases["items"]
+
+
 def start():
     """Start the periodic background version check (idempotent)."""
     global _started

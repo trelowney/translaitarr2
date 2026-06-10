@@ -6,12 +6,18 @@ pages (Library / Queue / Settings). The *arr client, library scanner and the
 translation engine are wired in as those modules land; this file owns app
 bootstrapping, the setup wizard, and authentication.
 """
+import html
 import json
 import logging
 import os
+import re
 import secrets
 import sys
 from logging.handlers import RotatingFileHandler
+
+from datetime import datetime, timezone
+
+from markupsafe import Markup
 
 from flask import (
     Flask, redirect, render_template, request, session, url_for, jsonify, flash,
@@ -162,6 +168,7 @@ def setup_submit():
         cfg["auth"]["enabled"] = False
         cfg["auth"]["password_hash"] = ""
 
+    cfg["automation"]["enabled"] = f.get("automation_enabled") == "on"
     cfg["onboarding_completed"] = True
     cfgmod.save_config(cfg)
     log.info("Setup wizard completed; config written.")
@@ -239,6 +246,17 @@ def _log_tail(n=120):
         return "No activity yet."
 
 
+def _fmt_ts(ts):
+    """SQLite UTC timestamp -> local 'MM-DD HH:MM'."""
+    if not ts:
+        return ""
+    try:
+        dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).astimezone()
+        return dt.strftime("%m-%d %H:%M")
+    except (ValueError, TypeError):
+        return ts
+
+
 def _queue_data():
     cfg = cfgmod.load_config()
     jobs = []
@@ -251,6 +269,8 @@ def _queue_data():
             "title": j["title"] or j["file_path"],
             "status": status,
             "chip": _STATUS_CHIP.get(status, "gray"),
+            "added": _fmt_ts(j.get("added_at")),
+            "finished": _fmt_ts(j.get("finished_at")),
             "detail": j.get("error") or result,
         })
     usage = {
@@ -441,6 +461,51 @@ def settings_save():
 @app.route("/status")
 def status():
     return jsonify({"config": cfgmod.redact(cfgmod.load_config())})
+
+
+@app.route("/api/version")
+def api_version():
+    info = version.check()
+    if not info.get("latest"):  # boot cache may predate the latest release
+        info = version.check(force=True)
+    return jsonify(info)
+
+
+def _render_md(text):
+    """Tiny, XSS-safe Markdown -> HTML for release notes (escape first)."""
+    out, in_list = [], False
+    for raw in (text or "").splitlines():
+        line = html.escape(raw)
+        if re.match(r"^#{1,6}\s+", raw):
+            if in_list:
+                out.append("</ul>"); in_list = False
+            out.append("<h4>" + re.sub(r"^#{1,6}\s+", "", line) + "</h4>")
+        elif re.match(r"^[-*]\s+", raw):
+            if not in_list:
+                out.append("<ul>"); in_list = True
+            out.append("<li>" + re.sub(r"^[-*]\s+", "", line) + "</li>")
+        else:
+            if in_list:
+                out.append("</ul>"); in_list = False
+            if line.strip():
+                out.append("<p>" + line + "</p>")
+    if in_list:
+        out.append("</ul>")
+    h = "".join(out)
+    h = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", h)
+    h = re.sub(r"`(.+?)`", r"<code>\1</code>", h)
+    return Markup(h)
+
+
+@app.template_filter("md")
+def _md_filter(text):
+    return _render_md(text)
+
+
+@app.route("/whats-new")
+def whats_new():
+    return render_template("whatsnew.html", releases=version.list_releases(),
+                           current=version.__version__, active="whatsnew")
 
 
 if __name__ == "__main__":

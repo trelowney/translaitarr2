@@ -3,7 +3,7 @@
 {% block content %}
 <div class="center-wrap">
   <div class="brand">transl<span class="accent">AI</span>tarr2</div>
-  <p class="sub" style="text-align:center">First-run setup. You can change anything later in Settings.</p>
+  <p class="sub" style="text-align:center">First-run setup — <strong>everything here is optional</strong> and can be changed later in Settings. Fill in what you can and click <em>Finish</em>.</p>
 
   <form method="post" action="{{ url_for('setup_submit') }}">
     <div class="card">
@@ -45,6 +45,11 @@
       <div class="check"><input type="checkbox" name="auth_enabled" id="auth_enabled"><span>Protect the web UI with a password</span></div>
       <label>Password <span class="hint">(only if enabled above)</span></label>
       <input type="password" name="password" autocomplete="new-password">
+    </div>
+
+    <div class="card">
+      <div class="step-title">5 · Automation</div>
+      <div class="check"><input type="checkbox" name="automation_enabled"><span>Automatically translate new downloads <span class="hint">— periodic library scan; tune the interval later in Settings</span></span></div>
     </div>
 
     <div class="toolbar"><span class="spacer"></span><button class="primary" type="submit">Finish setup</button></div>
