@@ -258,8 +258,12 @@ def translate():
     if not path:
         flash("No file path provided.")
         return redirect(url_for("library"))
-    added, info = db.add_job(path, title, source="manual")
-    flash(f"Queued: {title or path}" if added else f"Already queued (job {info}).")
+    force = request.form.get("force") == "1"
+    added, info = db.add_job(path, title, source="manual", force=force)
+    if added:
+        flash(f"Queued for re-translation: {title or path}" if force else f"Queued: {title or path}")
+    else:
+        flash(f"Already queued (job {info}).")
     return redirect(url_for("queue"))
 
 
@@ -362,6 +366,19 @@ def settings_save():
 
     for k in ("brackets", "parens", "music", "speaker", "uppercase"):
         cfg["sdh"][k] = f.get(f"sdh_{k}") == "on"
+
+    # Path remap rules — one "arr_path => local_path" per line.
+    remap = []
+    for line in f.get("path_remap", "").splitlines():
+        if "=>" in line:
+            a, b = line.split("=>", 1)
+            if a.strip() and b.strip():
+                remap.append({"from": a.strip(), "to": b.strip()})
+    cfg["paths"]["remap"] = remap
+
+    cfg["validation"]["enabled"] = f.get("validation_enabled") == "on"
+    for k in ("min_chars", "max_chars", "min_duration_ms", "max_duration_s"):
+        cfg["validation"][k] = _int(f.get(k), cfg["validation"][k])
 
     cfgmod.save_config(cfg)
     # Auto-save (fetch) requests get a quiet 204; full form posts redirect.

@@ -36,7 +36,7 @@ def _loop():
             time.sleep(10)
             continue
 
-        job_id, path, title = job
+        job_id, path, title, force = job
         cfg = cfgmod.load_config()
 
         if not cfg["gemini"].get("api_key"):
@@ -55,7 +55,7 @@ def _loop():
         log.info("Job %s: starting — %s", job_id, title or path)
         db.set_status(job_id, "processing")
         try:
-            outcome, model_calls = translator.translate_file(path, cfg)
+            outcome, model_calls = translator.translate_file(path, cfg, force=force)
             if outcome == "translated":
                 total = db.record_calls(model_calls)
                 db.set_status(job_id, "done", result="translated")

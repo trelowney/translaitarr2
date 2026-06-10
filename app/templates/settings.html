@@ -64,5 +64,25 @@
     <p class="hint">Batch size is set per model in the Gemini section above.</p>
   </div>
 
+  <div class="card">
+    <h2>Subtitle validation</h2>
+    <div class="check"><input type="checkbox" name="validation_enabled" {{ 'checked' if cfg.validation.enabled }}><span>Drop junk cues before translating (out-of-range text length or duration)</span></div>
+    <div class="row">
+      <div><label>Min chars</label><input type="number" name="min_chars" value="{{ cfg.validation.min_chars }}"></div>
+      <div><label>Max chars</label><input type="number" name="max_chars" value="{{ cfg.validation.max_chars }}"></div>
+    </div>
+    <div class="row">
+      <div><label>Min duration (ms)</label><input type="number" name="min_duration_ms" value="{{ cfg.validation.min_duration_ms }}"></div>
+      <div><label>Max duration (s)</label><input type="number" name="max_duration_s" value="{{ cfg.validation.max_duration_s }}"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Path mapping <span class="hint">— optional</span></h2>
+    <p class="hint">Only needed if Sonarr/Radarr report paths that differ from where this app sees the media. One rule per line: <code>arr_path =&gt; local_path</code> (e.g. <code>/movies =&gt; /data/movies</code>).</p>
+    <textarea name="path_remap" placeholder="/movies =&gt; /data/movies">{% for r in cfg.paths.remap %}{{ r['from'] }} => {{ r['to'] }}
+{% endfor %}</textarea>
+  </div>
+
 </form>
 {% endblock %}

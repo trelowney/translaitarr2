@@ -177,6 +177,29 @@ def remove_sdh(src_path, dst_path, sdh):
     return removed
 
 
+def validate_srt(src_path, dst_path, v):
+    """Drop cues that fail sanity bounds (text length / duration) — usually OCR
+    junk or non-dialogue. Returns how many were dropped."""
+    min_c = v.get("min_chars", 1)
+    max_c = v.get("max_chars", 200)
+    min_d = v.get("min_duration_ms", 100)
+    max_d = v.get("max_duration_s", 15) * 1000
+    kept, dropped = [], 0
+    for _, tc, text in parse_srt(src_path):
+        m = re.search(r"(\d{2}:\d{2}:\d{2},\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2},\d{3})", tc)
+        dur = (_tc_to_ms(m.group(2)) - _tc_to_ms(m.group(1))) if m else 0
+        chars = len(" ".join(text).strip())
+        if chars < min_c or chars > max_c or dur < min_d or dur > max_d:
+            dropped += 1
+            continue
+        kept.append((tc, text))
+    with open(dst_path, "w", encoding="utf-8") as f:
+        for n, (tc, text) in enumerate(kept, start=1):
+            f.write(f"{n}\n{tc}\n" + "\n".join(text) + "\n\n")
+    log.info("Validation: dropped %s, kept %s", dropped, len(kept))
+    return dropped
+
+
 # ── Gemini ────────────────────────────────────────────────────────────────────
 
 def list_available_models(api_key):
@@ -436,7 +459,7 @@ def prepend_credit(srt_path, model):
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
-def translate_file(file_path, cfg):
+def translate_file(file_path, cfg, force=False):
     """Translate one video file's best source subtitle to the target language.
 
     Returns (outcome, model_calls). outcome is 'translated' or 'skipped:<reason>'.
@@ -446,16 +469,23 @@ def translate_file(file_path, cfg):
     target_lang = cfg["languages"]["target"]["name"]
 
     log.info("=" * 60)
-    log.info("Processing: %s", file_path)
+    log.info("Processing: %s%s", file_path, " [FORCE]" if force else "")
 
-    info = media.classify(file_path, cfg)
-    if not info["translatable"]:
-        log.info("Skip: %s", info["reason"])
-        return f"skipped:{info['reason']}", {}
+    if force:
+        # Re-translate regardless of skip rules; pick the best source directly.
+        streams = media.ffprobe_streams(file_path)
+        src = media.best_source_subtitle(streams, cfg["languages"]["source_priority"], target_code)
+        if src is None:
+            raise RuntimeError("No source subtitle to translate from")
+        src_kind, stream_idx, src_lang_code = src
+    else:
+        info = media.classify(file_path, cfg)
+        if not info["translatable"]:
+            log.info("Skip: %s", info["reason"])
+            return f"skipped:{info['reason']}", {}
+        src_kind, stream_idx, src_lang_code = info["src_kind"], info["src_index"], info["src_lang"]
 
-    stream_idx = info["src_index"]
-    src_lang_code = info["src_lang"]
-    ocr_needed = info["src_kind"] == "image"
+    ocr_needed = src_kind == "image"
     src_lang = LANG_NAMES.get(src_lang_code, src_lang_code.upper())
     log.info("Source: stream %s, lang=%s (%s)%s",
              stream_idx, src_lang, src_lang_code, " [PGS -> OCR]" if ocr_needed else "")
@@ -477,6 +507,12 @@ def translate_file(file_path, cfg):
             srt_to_send = clean_srt
         else:
             srt_to_send = raw_srt
+
+        val = cfg.get("validation", {})
+        if val.get("enabled"):
+            valid_srt = os.path.join(tmp, "valid.srt")
+            validate_srt(srt_to_send, valid_srt, val)
+            srt_to_send = valid_srt
 
         trl_map, used_model, src_entries, model_calls = _translate_all(
             srt_to_send, src_lang, target_lang, cfg, tmp)

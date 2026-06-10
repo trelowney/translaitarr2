@@ -95,6 +95,7 @@ def scan(cfg=None, force=False):
             "status": st["status"],
             "chip": st["chip"],
             "translatable": bool(st.get("translatable")),
+            "reason": st.get("reason"),
         })
     conn.close()
     return rows, errors

@@ -93,9 +93,12 @@ def has_target_subtitle(streams, target_code):
     return any(s.get("codec_type") == "subtitle" and _lang(s) == t for s in streams)
 
 
+def target_sidecar_path(path, target_code):
+    return f"{os.path.splitext(path)[0]}.{target_code}.srt"
+
+
 def has_target_sidecar(path, target_code):
-    stem = os.path.splitext(path)[0]
-    return os.path.exists(f"{stem}.{target_code}.srt")
+    return os.path.exists(target_sidecar_path(path, target_code))
 
 
 def best_source_subtitle(streams, source_priority, target_code):
@@ -135,8 +138,18 @@ def classify(path, cfg):
     target_name = cfg["languages"]["target"].get("name") or target.upper()
     if not os.path.exists(path):
         return {"status": "File not found", "chip": "gray", "translatable": False, "reason": "missing"}
-    if has_target_sidecar(path, target):
-        return {"status": "Translated", "chip": "blue", "translatable": False, "reason": "sidecar"}
+
+    # A fresh sidecar = done. If the video is newer than our sidecar, the release
+    # was upgraded and the old translation is stale → re-translate.
+    sidecar = target_sidecar_path(path, target)
+    sidecar_stale = False
+    if os.path.exists(sidecar):
+        try:
+            if os.path.getmtime(sidecar) >= os.path.getmtime(path):
+                return {"status": "Translated", "chip": "blue", "translatable": False, "reason": "sidecar"}
+            sidecar_stale = True
+        except OSError:
+            return {"status": "Translated", "chip": "blue", "translatable": False, "reason": "sidecar"}
 
     streams = ffprobe_streams(path)
     if has_target_audio(streams, target) or has_target_subtitle(streams, target):
@@ -147,11 +160,15 @@ def classify(path, cfg):
         return {"status": "No source subtitle", "chip": "red", "translatable": False, "reason": "no_source"}
 
     kind, index, lang = src
+    if sidecar_stale:
+        status = "Needs re-translation (upgrade)"
+    else:
+        status = "Needs translation" + (" (OCR)" if kind == "image" else "")
     return {
-        "status": "Needs translation" + (" (OCR)" if kind == "image" else ""),
+        "status": status,
         "chip": "amber",
         "translatable": True,
-        "reason": "translatable",
+        "reason": "upgrade" if sidecar_stale else "translatable",
         "src_kind": kind,
         "src_index": index,
         "src_lang": lang,

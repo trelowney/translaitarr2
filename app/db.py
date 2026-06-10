@@ -34,6 +34,7 @@ def init_db():
             title       TEXT DEFAULT '',
             source      TEXT DEFAULT 'manual',
             status      TEXT DEFAULT 'pending',
+            force       INTEGER DEFAULT 0,
             added_at    TEXT DEFAULT (datetime('now')),
             started_at  TEXT,
             finished_at TEXT,
@@ -52,13 +53,18 @@ def init_db():
         );
         """
     )
+    # Migrate DBs created before the 'force' column existed.
+    try:
+        conn.execute("ALTER TABLE jobs ADD COLUMN force INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
 
 # ── Jobs ──────────────────────────────────────────────────────────────────────
 
-def add_job(file_path, title="", source="manual"):
+def add_job(file_path, title="", source="manual", force=False):
     """Queue a file. Returns (added, id). Skips if already pending/processing."""
     conn = get_db()
     existing = conn.execute(
@@ -69,8 +75,8 @@ def add_job(file_path, title="", source="manual"):
         conn.close()
         return False, existing["id"]
     cur = conn.execute(
-        "INSERT INTO jobs (file_path, title, source) VALUES (?, ?, ?)",
-        (file_path, title, source),
+        "INSERT INTO jobs (file_path, title, source, force) VALUES (?, ?, ?, ?)",
+        (file_path, title, source, 1 if force else 0),
     )
     conn.commit()
     jid = cur.lastrowid
@@ -81,10 +87,10 @@ def add_job(file_path, title="", source="manual"):
 def get_next_pending():
     conn = get_db()
     row = conn.execute(
-        "SELECT id, file_path, title FROM jobs WHERE status='pending' ORDER BY id LIMIT 1"
+        "SELECT id, file_path, title, force FROM jobs WHERE status='pending' ORDER BY id LIMIT 1"
     ).fetchone()
     conn.close()
-    return (row["id"], row["file_path"], row["title"]) if row else None
+    return (row["id"], row["file_path"], row["title"], bool(row["force"])) if row else None
 
 
 def set_status(job_id, status, result=None, error=None):
