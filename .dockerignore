@@ -9,3 +9,4 @@ __pycache__/
 *.md
 docker-compose*.yaml
 .env*
+docs/

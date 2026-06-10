@@ -13,6 +13,12 @@ Blu-ray (PGS) bitmap subtitles** into text before translating.
 
 ---
 
+## Screenshots
+
+| Library | Queue | Settings |
+|---|---|---|
+| [![Library](docs/library.png)](docs/library.png) | [![Queue](docs/queue.png)](docs/queue.png) | [![Settings](docs/settings.png)](docs/settings.png) |
+
 ## Why another one?
 
 Tools like [Bazarr](https://www.bazarr.media/) and
