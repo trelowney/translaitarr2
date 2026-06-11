@@ -13,7 +13,7 @@ import requests
 
 log = logging.getLogger("translaitarr2")
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 # Upstream repo to check for releases. Forks can point this elsewhere later.
 REPO = "trelowney/translaitarr2"
 CHECK_INTERVAL = 6 * 3600  # seconds
