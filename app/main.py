@@ -82,7 +82,7 @@ PROVIDER_LABELS = {
     "gtranslate_free": "Google Translate (free)",
 }
 
-PUBLIC_ENDPOINTS = {"health", "static", "login", "setup", "setup_submit"}
+PUBLIC_ENDPOINTS = {"health", "static", "login", "setup", "setup_submit", "favicon"}
 # JS helper endpoints the setup wizard needs before a config/auth exists.
 WIZARD_API = {"arr_test", "gemini_models", "gemini_test",
               "openrouter_models", "openrouter_test",
@@ -195,6 +195,12 @@ def setup_submit():
 
 
 # ── Pages (placeholders until the scanner/engine are wired in) ─────────────────
+@app.route("/favicon.ico")
+def favicon():
+    # Browsers/crawlers request this at the site root regardless of the <link> tags.
+    return app.send_static_file("favicon.ico")
+
+
 @app.route("/")
 def library():
     cfg = cfgmod.load_config()

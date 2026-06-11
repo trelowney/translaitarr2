@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="14" fill="#15171c"/>
+  <rect x="1.25" y="1.25" width="61.5" height="61.5" rx="12.75" fill="none" stroke="#2d323c" stroke-width="1.5"/>
+  <text x="32" y="34" text-anchor="middle" dominant-baseline="central"
+        font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'DejaVu Sans', sans-serif"
+        font-weight="700" font-size="32" letter-spacing="-1.5" fill="#4f9dff">AI</text>
+</svg>
