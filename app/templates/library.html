@@ -54,6 +54,12 @@
     <option value="gray">Other</option>
   </select>
   <span class="spacer"></span>
+  {% if providers %}
+  <select id="lib-provider" title="Which provider to translate with (overrides the priority slots for jobs you queue here)">
+    <option value="">Default provider</option>
+    {% for v, l in providers %}<option value="{{ v }}">{{ l }}</option>{% endfor %}
+  </select>
+  {% endif %}
   <form method="post" action="{{ url_for('rescan') }}" style="display:inline"><button class="btn" type="submit">Rescan</button></form>
   <form method="post" action="{{ url_for('translate_all') }}" style="display:inline"><button class="btn primary" type="submit">Translate all missing</button></form>
 </div>
@@ -78,6 +84,19 @@
   }
   q.addEventListener("input", apply);
   f.addEventListener("change", apply);
+
+  // Per-job provider: inject the chosen provider into any translate form on submit.
+  const prov = document.getElementById("lib-provider");
+  if (prov) {
+    document.addEventListener("submit", (e) => {
+      const form = e.target;
+      const act = form.getAttribute("action") || "";
+      if (!act.includes("translate") || !prov.value) return;  // translate / translate-all / re-translate
+      let h = form.querySelector('input[name="provider"]');
+      if (!h) { h = document.createElement("input"); h.type = "hidden"; h.name = "provider"; form.appendChild(h); }
+      h.value = prov.value;
+    }, true);
+  }
 })();
 </script>
 {% endblock %}

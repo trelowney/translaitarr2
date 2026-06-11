@@ -21,12 +21,235 @@
     <input type="password" name="radarr_api_key" placeholder="{{ '••••••••' if cfg.arr.radarr.api_key else '' }}">
   </div>
 
+  {% from "partials/_model_widget.html" import model_widget %}
   <div class="card">
-    <h2>Gemini</h2>
-    <label>API key <span class="hint">(leave blank to keep current)</span></label>
-    <input type="password" name="gemini_api_key" placeholder="{{ '••••••••' if cfg.gemini.api_key else '' }}">
-    <div class="toolbar" style="margin:8px 0"><button type="button" class="small" id="gemini-test-btn">Test key</button><span id="gemini-test-msg" class="hint"></span></div>
-    {% include "partials/_models.html" %}
+    <h2>AI providers</h2>
+    <p class="hint">Pick which engine translates, with optional fallbacks. The worker tries
+      <b>Primary</b> first (every model in order), then <b>Secondary</b>, then <b>Tertiary</b>.</p>
+    <div class="row">
+      <div>
+        <label>Primary</label>
+        <select name="ai_primary" class="ai-slot">
+          <option value="gemini" {{ 'selected' if cfg.ai.primary == 'gemini' }}>Gemini</option>
+          <option value="openrouter" {{ 'selected' if cfg.ai.primary == 'openrouter' }}>OpenRouter</option>
+          <option value="openai_compat" {{ 'selected' if cfg.ai.primary == 'openai_compat' }}>OpenAI-compatible</option>
+          <option value="anthropic" {{ 'selected' if cfg.ai.primary == 'anthropic' }}>Anthropic (Claude)</option>
+          <option value="cloudflare" {{ 'selected' if cfg.ai.primary == 'cloudflare' }}>Cloudflare Workers AI</option>
+          <option value="deepl" {{ 'selected' if cfg.ai.primary == 'deepl' }}>DeepL</option>
+          <option value="libretranslate" {{ 'selected' if cfg.ai.primary == 'libretranslate' }}>LibreTranslate</option>
+          <option value="google" {{ 'selected' if cfg.ai.primary == 'google' }}>Google Translate</option>
+          <option value="azure" {{ 'selected' if cfg.ai.primary == 'azure' }}>Microsoft / Azure</option>
+          <option value="yandex" {{ 'selected' if cfg.ai.primary == 'yandex' }}>Yandex</option>
+          <option value="cf_m2m100" {{ 'selected' if cfg.ai.primary == 'cf_m2m100' }}>Cloudflare m2m100</option>
+          <option value="gtranslate_free" {{ 'selected' if cfg.ai.primary == 'gtranslate_free' }}>Google Translate (free, no key)</option>
+        </select>
+      </div>
+      <div>
+        <label>Secondary <span class="hint">(fallback)</span></label>
+        <select name="ai_secondary" class="ai-slot">
+          <option value="none" {{ 'selected' if cfg.ai.secondary == 'none' }}>None</option>
+          <option value="gemini" {{ 'selected' if cfg.ai.secondary == 'gemini' }}>Gemini</option>
+          <option value="openrouter" {{ 'selected' if cfg.ai.secondary == 'openrouter' }}>OpenRouter</option>
+          <option value="openai_compat" {{ 'selected' if cfg.ai.secondary == 'openai_compat' }}>OpenAI-compatible</option>
+          <option value="anthropic" {{ 'selected' if cfg.ai.secondary == 'anthropic' }}>Anthropic (Claude)</option>
+          <option value="cloudflare" {{ 'selected' if cfg.ai.secondary == 'cloudflare' }}>Cloudflare Workers AI</option>
+          <option value="deepl" {{ 'selected' if cfg.ai.secondary == 'deepl' }}>DeepL</option>
+          <option value="libretranslate" {{ 'selected' if cfg.ai.secondary == 'libretranslate' }}>LibreTranslate</option>
+          <option value="google" {{ 'selected' if cfg.ai.secondary == 'google' }}>Google Translate</option>
+          <option value="azure" {{ 'selected' if cfg.ai.secondary == 'azure' }}>Microsoft / Azure</option>
+          <option value="yandex" {{ 'selected' if cfg.ai.secondary == 'yandex' }}>Yandex</option>
+          <option value="cf_m2m100" {{ 'selected' if cfg.ai.secondary == 'cf_m2m100' }}>Cloudflare m2m100</option>
+          <option value="gtranslate_free" {{ 'selected' if cfg.ai.secondary == 'gtranslate_free' }}>Google Translate (free, no key)</option>
+        </select>
+      </div>
+      <div>
+        <label>Tertiary <span class="hint">(fallback)</span></label>
+        <select name="ai_tertiary" class="ai-slot">
+          <option value="none" {{ 'selected' if cfg.ai.tertiary == 'none' }}>None</option>
+          <option value="gemini" {{ 'selected' if cfg.ai.tertiary == 'gemini' }}>Gemini</option>
+          <option value="openrouter" {{ 'selected' if cfg.ai.tertiary == 'openrouter' }}>OpenRouter</option>
+          <option value="openai_compat" {{ 'selected' if cfg.ai.tertiary == 'openai_compat' }}>OpenAI-compatible</option>
+          <option value="anthropic" {{ 'selected' if cfg.ai.tertiary == 'anthropic' }}>Anthropic (Claude)</option>
+          <option value="cloudflare" {{ 'selected' if cfg.ai.tertiary == 'cloudflare' }}>Cloudflare Workers AI</option>
+          <option value="deepl" {{ 'selected' if cfg.ai.tertiary == 'deepl' }}>DeepL</option>
+          <option value="libretranslate" {{ 'selected' if cfg.ai.tertiary == 'libretranslate' }}>LibreTranslate</option>
+          <option value="google" {{ 'selected' if cfg.ai.tertiary == 'google' }}>Google Translate</option>
+          <option value="azure" {{ 'selected' if cfg.ai.tertiary == 'azure' }}>Microsoft / Azure</option>
+          <option value="yandex" {{ 'selected' if cfg.ai.tertiary == 'yandex' }}>Yandex</option>
+          <option value="cf_m2m100" {{ 'selected' if cfg.ai.tertiary == 'cf_m2m100' }}>Cloudflare m2m100</option>
+          <option value="gtranslate_free" {{ 'selected' if cfg.ai.tertiary == 'gtranslate_free' }}>Google Translate (free, no key)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="provider-tabs" style="margin-top:18px">
+      <button type="button" class="provider-tab active" data-provider-tab="gemini">Gemini</button>
+      <button type="button" class="provider-tab" data-provider-tab="openrouter">OpenRouter</button>
+      <button type="button" class="provider-tab" data-provider-tab="openai_compat">OpenAI-compatible</button>
+      <button type="button" class="provider-tab" data-provider-tab="anthropic">Anthropic</button>
+      <button type="button" class="provider-tab" data-provider-tab="cloudflare">Cloudflare</button>
+      <button type="button" class="provider-tab" data-provider-tab="deepl">DeepL</button>
+      <button type="button" class="provider-tab" data-provider-tab="libretranslate">LibreTranslate</button>
+      <button type="button" class="provider-tab" data-provider-tab="google">Google</button>
+      <button type="button" class="provider-tab" data-provider-tab="azure">Azure</button>
+      <button type="button" class="provider-tab" data-provider-tab="yandex">Yandex</button>
+      <button type="button" class="provider-tab" data-provider-tab="cf_m2m100">CF m2m100</button>
+      <button type="button" class="provider-tab" data-provider-tab="gtranslate_free">Google free</button>
+    </div>
+
+    <div class="provider-panel" data-provider-panel="gemini">
+      <label>Gemini API key <span class="hint">(leave blank to keep current)</span></label>
+      <input type="password" name="gemini_api_key" placeholder="{{ '••••••••' if cfg.gemini.api_key else '' }}">
+      <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="gemini" data-test-url="/api/gemini/test">Test key</button><span class="test-msg hint"></span></div>
+      {{ model_widget("gemini", cfg.gemini.models, cfg.gemini.model_batch, cfg.gemini.model_daily_limit,
+                      cfg.translation.batch_size, cfg.limits.max_daily_per_model,
+                      "models", "model_batch", "model_daily_limit",
+                      "/api/gemini/models", "gemini_api_key") }}
+    </div>
+
+    <div class="provider-panel" data-provider-panel="openrouter" hidden>
+      <label>OpenRouter API key <span class="hint">(leave blank to keep current)</span></label>
+      <input type="password" name="openrouter_api_key" placeholder="{{ '••••••••' if cfg.openrouter.api_key else '' }}">
+      <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="openrouter" data-test-url="/api/openrouter/test">Test key</button><span class="test-msg hint"></span></div>
+      <p class="hint">Browse OpenRouter's catalogue and pick models — <b>Free</b> models cost nothing to run.
+        The list loads from OpenRouter's public API (no credit used just to browse).</p>
+      {{ model_widget("openrouter", cfg.openrouter.models, cfg.openrouter.model_batch, cfg.openrouter.model_daily_limit,
+                      cfg.translation.batch_size, cfg.limits.max_daily_per_model,
+                      "or_models", "or_model_batch", "or_model_daily_limit",
+                      "/api/openrouter/models", "openrouter_api_key", browser=True) }}
+    </div>
+
+    <div class="provider-panel" data-provider-panel="openai_compat" hidden>
+      <p class="hint">Works with anything that speaks the OpenAI API — <b>local</b> (Ollama, LM Studio,
+        vLLM, LocalAI; usually no key needed) or <b>hosted</b> (Groq, DeepSeek, OpenAI, Mistral,
+        xAI/Grok, Together, Cloudflare Workers AI). Point the base URL at the server's
+        <code>/v1</code> and add the model ids you want.</p>
+      <details class="examples">
+        <summary>Example base URLs</summary>
+        <table class="kv">
+          <tr><td>Ollama (local)</td><td><code>http://&lt;host&gt;:11434/v1</code></td></tr>
+          <tr><td>LM Studio (local)</td><td><code>http://&lt;host&gt;:1234/v1</code></td></tr>
+          <tr><td>vLLM (local)</td><td><code>http://&lt;host&gt;:8000/v1</code></td></tr>
+          <tr><td>Groq</td><td><code>https://api.groq.com/openai/v1</code></td></tr>
+          <tr><td>DeepSeek</td><td><code>https://api.deepseek.com/v1</code></td></tr>
+          <tr><td>OpenAI</td><td><code>https://api.openai.com/v1</code></td></tr>
+          <tr><td>Mistral</td><td><code>https://api.mistral.ai/v1</code></td></tr>
+          <tr><td>xAI (Grok)</td><td><code>https://api.x.ai/v1</code></td></tr>
+          <tr><td>Together</td><td><code>https://api.together.xyz/v1</code></td></tr>
+          <tr><td>Cloudflare Workers AI</td><td><code>https://api.cloudflare.com/client/v4/accounts/&lt;ACCOUNT_ID&gt;/ai/v1</code></td></tr>
+        </table>
+        <p class="hint">Local servers usually need no key. Cloudflare uses a Workers-AI API token
+          (free tier ≈ 10k neurons/day); type models manually, e.g.
+          <code>@cf/meta/llama-3.1-8b-instruct</code> — its <code>/v1</code> has no model list to fetch.</p>
+      </details>
+      <label>Base URL</label>
+      <input type="text" name="openai_base_url" value="{{ cfg.openai_compat.base_url }}"
+             placeholder="http://ollama:11434/v1">
+      <label>API key <span class="hint">(leave blank for local servers / to keep current)</span></label>
+      <input type="password" name="openai_compat_api_key" placeholder="{{ '••••••••' if cfg.openai_compat.api_key else '' }}">
+      <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="openai_compat" data-test-url="/api/openai/test" data-url-field="openai_base_url">Test connection</button><span class="test-msg hint"></span></div>
+      {{ model_widget("openai_compat", cfg.openai_compat.models, cfg.openai_compat.model_batch, cfg.openai_compat.model_daily_limit,
+                      cfg.translation.batch_size, cfg.limits.max_daily_per_model,
+                      "oc_models", "oc_model_batch", "oc_model_daily_limit",
+                      "/api/openai/models", "openai_compat_api_key",
+                      display="OpenAI-compatible", url_field="openai_base_url") }}
+    </div>
+
+    <div class="provider-panel" data-provider-panel="anthropic" hidden>
+      <p class="hint">Native <b>Claude</b> models (Opus / Sonnet / Haiku). Anthropic's API is
+        paid — there's no free tier. Browsing the model list is free; translating spends credit.</p>
+      <label>Anthropic API key <span class="hint">(leave blank to keep current)</span></label>
+      <input type="password" name="anthropic_api_key" placeholder="{{ '••••••••' if cfg.anthropic.api_key else '' }}">
+      <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="anthropic" data-test-url="/api/anthropic/test">Test key</button><span class="test-msg hint"></span></div>
+      {{ model_widget("anthropic", cfg.anthropic.models, cfg.anthropic.model_batch, cfg.anthropic.model_daily_limit,
+                      cfg.translation.batch_size, cfg.limits.max_daily_per_model,
+                      "an_models", "an_model_batch", "an_model_daily_limit",
+                      "/api/anthropic/models", "anthropic_api_key", display="Claude") }}
+    </div>
+
+    <div class="provider-panel" data-provider-panel="cloudflare" hidden>
+      <p class="hint">Cloudflare <b>Workers AI</b> — models on Cloudflare's edge, free tier
+        ≈ 10k neurons/day. <b>Account ID</b>: dashboard → AI → Workers AI (right sidebar).
+        <b>Token</b>: AI → Workers AI → <i>Use REST API → Create a Workers AI API Token</i>.
+        Hit <b>Fetch from API</b> to load the text-generation models.</p>
+      <label>Account ID</label>
+      <input type="text" name="cloudflare_account_id" value="{{ cfg.cloudflare.account_id }}" placeholder="your 32-character Cloudflare account ID">
+      <label>API token <span class="hint">(leave blank to keep current)</span></label>
+      <input type="password" name="cloudflare_api_key" placeholder="{{ '••••••••' if cfg.cloudflare.api_key else '' }}">
+      <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="cloudflare" data-test-url="/api/cloudflare/test" data-url-field="cloudflare_account_id">Test connection</button><span class="test-msg hint"></span></div>
+      {{ model_widget("cloudflare", cfg.cloudflare.models, cfg.cloudflare.model_batch, cfg.cloudflare.model_daily_limit,
+                      cfg.translation.batch_size, cfg.limits.max_daily_per_model,
+                      "cf_models", "cf_model_batch", "cf_model_daily_limit",
+                      "/api/cloudflare/models", "cloudflare_api_key",
+                      display="Workers AI", url_field="cloudflare_account_id") }}
+    </div>
+
+    <div class="provider-panel" data-provider-panel="deepl" hidden>
+      <p class="hint"><b>DeepL</b> — dedicated machine translation (not an LLM). Excellent quality,
+        but it translates cue by cue without scene context, so idioms/nuance land a touch flatter
+        than an LLM. Free tier = 500k characters/month; the free vs paid endpoint is detected
+        automatically from your key (free keys end in <code>:fx</code>). No model to pick.</p>
+      <label>DeepL API key <span class="hint">(leave blank to keep current)</span></label>
+      <input type="password" name="deepl_api_key" placeholder="{{ '••••••••' if cfg.deepl.api_key else '' }}">
+      <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="deepl" data-test-url="/api/deepl/test">Test key</button><span class="test-msg hint"></span></div>
+      <p class="hint">Set DeepL as a provider in the priority slots above to use it.</p>
+    </div>
+
+    <div class="provider-panel" data-provider-panel="libretranslate" hidden>
+      <p class="hint"><b>LibreTranslate</b> — open-source machine translation you can
+        <b>self-host</b> (fully local &amp; free, like Ollama but for MT) or point at a public
+        instance. Quality is below the LLMs and DeepL, but it needs no cloud and no key when
+        self-hosted. Like all MT, it translates cue by cue without scene context.</p>
+      <label>Server URL</label>
+      <input type="text" name="libretranslate_base_url" value="{{ cfg.libretranslate.base_url }}" placeholder="http://libretranslate:5000">
+      <label>API key <span class="hint">(only if your instance requires one — leave blank to keep current)</span></label>
+      <input type="password" name="libretranslate_api_key" placeholder="{{ '••••••••' if cfg.libretranslate.api_key else '' }}">
+      <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="libretranslate" data-test-url="/api/libretranslate/test" data-url-field="libretranslate_base_url">Test connection</button><span class="test-msg hint"></span></div>
+      <p class="hint">Set LibreTranslate as a provider in the priority slots above to use it.</p>
+    </div>
+
+    <div class="provider-panel" data-provider-panel="google" hidden>
+      <p class="hint"><b>Google Cloud Translation</b> (official, paid). Create an API key in
+        Google Cloud → APIs &amp; Services → Credentials, with the Translation API enabled.</p>
+      <label>API key <span class="hint">(leave blank to keep current)</span></label>
+      <input type="password" name="google_api_key" placeholder="{{ '••••••••' if cfg.google.api_key else '' }}">
+      <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="google" data-test-url="/api/google/test">Test key</button><span class="test-msg hint"></span></div>
+    </div>
+
+    <div class="provider-panel" data-provider-panel="azure" hidden>
+      <p class="hint"><b>Microsoft / Azure Translator</b>. Key + the resource <b>region</b> from your
+        Azure Translator resource (Keys and Endpoint page).</p>
+      <label>API key <span class="hint">(leave blank to keep current)</span></label>
+      <input type="password" name="azure_api_key" placeholder="{{ '••••••••' if cfg.azure.api_key else '' }}">
+      <label>Region</label>
+      <input type="text" name="azure_region" value="{{ cfg.azure.region }}" placeholder="e.g. westeurope">
+      <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="azure" data-test-url="/api/azure/test">Test key</button><span class="test-msg hint"></span></div>
+    </div>
+
+    <div class="provider-panel" data-provider-panel="yandex" hidden>
+      <p class="hint"><b>Yandex Translate</b>. API key + the <b>folder id</b> of your Yandex Cloud folder.</p>
+      <label>API key <span class="hint">(leave blank to keep current)</span></label>
+      <input type="password" name="yandex_api_key" placeholder="{{ '••••••••' if cfg.yandex.api_key else '' }}">
+      <label>Folder ID</label>
+      <input type="text" name="yandex_folder_id" value="{{ cfg.yandex.folder_id }}" placeholder="b1g…">
+      <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="yandex" data-test-url="/api/yandex/test">Test key</button><span class="test-msg hint"></span></div>
+    </div>
+
+    <div class="provider-panel" data-provider-panel="cf_m2m100" hidden>
+      <p class="hint"><b>Cloudflare m2m100</b> — Cloudflare's dedicated translation model. <b>Reuses the
+        account ID + token from the Cloudflare tab</b> (no separate setup). Free tier, but quality is
+        below the LLMs, and it translates one cue per request (slower on long files).</p>
+      <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="cf_m2m100" data-test-url="/api/cfm2m/test">Test connection</button><span class="test-msg hint"></span></div>
+      <p class="hint">Set it in the priority slots above. Configure credentials in the Cloudflare tab.</p>
+    </div>
+
+    <div class="provider-panel" data-provider-panel="gtranslate_free" hidden>
+      <p class="hint"><b>Google Translate (free, no key)</b> — the unofficial keyless endpoint. <b>No
+        sign-up</b>, but quality is poor, it may rate-limit, and it's not meant for heavy use. Here as
+        a last-resort / zero-setup option.</p>
+      <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="gtranslate_free" data-test-url="/api/gtfree/test">Test</button><span class="test-msg hint"></span></div>
+      <p class="hint">Set it in the priority slots above — no configuration needed.</p>
+    </div>
   </div>
 
   <div class="card">
@@ -47,7 +270,7 @@
       <div><label>Total requests / day</label><input type="number" name="max_daily_total" value="{{ cfg.limits.max_daily_total }}"></div>
       <div><label>Max titles per automation run</label><input type="number" name="max_per_run" value="{{ cfg.limits.max_per_run }}"></div>
     </div>
-    <p class="hint">Per-model daily limits are set per model in the Gemini section above.</p>
+    <p class="hint">Per-model daily limits are set per model in the AI providers section above.</p>
   </div>
 
   <div class="card">
@@ -70,7 +293,7 @@
     <label>Verify samples <span class="hint">— cues checked per verification</span></label>
     <input type="number" name="verify_samples" value="{{ cfg.translation.verify_samples }}">
     <div class="check" style="margin-top:14px"><input type="checkbox" checked disabled><span>Add a credit line to every subtitle — &ldquo;Translated by translAItarr2&rdquo; and the model used <span class="hint">(always on)</span></span></div>
-    <p class="hint">Batch size is set per model in the Gemini section above. Manual verification is the &ldquo;Verify&rdquo; button on a translated title in the Library.</p>
+    <p class="hint">Batch size is set per model in the AI providers section above. Manual verification is the &ldquo;Verify&rdquo; button on a translated title in the Library.</p>
   </div>
 
   <div class="card">
@@ -98,6 +321,16 @@
       <button type="button" class="small" id="remap-detect">Detect folders</button>
       <span id="remap-msg" class="hint"></span>
     </div>
+  </div>
+
+  <div class="card">
+    <h2>Anonymous statistics</h2>
+    <div class="check"><input type="checkbox" name="telemetry_enabled" {{ 'checked' if cfg.telemetry.enabled }}><span>Help count how many translAItarr2 instances are running</span></div>
+    <p class="hint">When on, the app sends <b>once a day</b> only a <b>random id</b> (generated on this
+      instance) and the app <b>version</b> — nothing else. No file paths, API keys, library data,
+      settings or IP addresses are sent or stored. It powers a public &ldquo;active instances&rdquo;
+      counter, nothing more. Turn it off any time — a disabled instance sends nothing and doesn't even
+      generate an id.</p>
   </div>
 
 </form>

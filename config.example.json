@@ -32,8 +32,22 @@
       "gemini-2.5-flash": 200,
       "gemini-flash-latest": 200,
       "gemini-2.0-flash": 200
-    }
+    },
+    "model_daily_limit": {}
   },
+
+  "_providers_comment": "AI provider priority: primary first, then secondary, then tertiary ('none' to skip). Each provider below is configured in Settings → AI providers. LLM providers take an api_key + a models list (with optional per-model batch/daily-limit); MT engines need only a key or URL.",
+  "ai": { "primary": "gemini", "secondary": "none", "tertiary": "none" },
+
+  "openrouter": { "api_key": "", "models": [], "model_batch": {}, "model_daily_limit": {} },
+  "openai_compat": { "api_key": "", "base_url": "", "models": [], "model_batch": {}, "model_daily_limit": {} },
+  "anthropic": { "api_key": "", "base_url": "", "models": [], "model_batch": {}, "model_daily_limit": {} },
+  "cloudflare": { "api_key": "", "account_id": "", "models": [], "model_batch": {}, "model_daily_limit": {} },
+  "deepl": { "api_key": "" },
+  "libretranslate": { "api_key": "", "base_url": "" },
+  "google": { "api_key": "" },
+  "azure": { "api_key": "", "region": "" },
+  "yandex": { "api_key": "", "folder_id": "" },
 
   "languages": {
     "source_priority": ["eng", "fra", "deu", "spa"],
@@ -62,6 +76,12 @@
     "enabled": false,
     "scan_interval_minutes": 30,
     "rpd_reset_tz": "America/Los_Angeles"
+  },
+
+  "_telemetry_comment": "Anonymous active-instance counter — opt-out (on by default). Sends only a random instance_id + the app version once a day; nothing else. Set enabled=false (or env TELEMETRY=off) to disable. See the README's Privacy section.",
+  "telemetry": {
+    "enabled": true,
+    "instance_id": ""
   },
 
   "translation": {

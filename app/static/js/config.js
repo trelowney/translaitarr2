@@ -1,18 +1,30 @@
-// Settings page behaviour: draggable Gemini model list (per-model batch + daily
-// limit), path-mapping table, and auto-save. Each block no-ops if its markup
-// isn't present.
+// Settings/wizard behaviour: draggable per-provider model lists (per-model batch
+// + daily limit), the OpenRouter model browser, provider tabs, key tests, the
+// path-mapping table, and auto-save. Each block no-ops if its markup isn't present.
 
-// ── Model list ───────────────────────────────────────────────────────────────
-(function () {
-  const MODELS_URL = "/api/gemini/models";
-  const DEFAULT_BATCH = 150, DEFAULT_LIMIT = 18;
-  const ul = document.getElementById("model-list");
+// ── Model widgets (one per AI provider) ──────────────────────────────────────
+function initModelWidget(root) {
+  const ul = root.querySelector(".model-list");
   if (!ul) return;
-  const modelsField = document.getElementById(ul.dataset.target);
-  const batchField = document.getElementById(ul.dataset.batchTarget);
-  const limitField = document.getElementById(ul.dataset.limitTarget);
+  const DEFAULT_BATCH = parseInt(root.dataset.defaultBatch, 10) || 150;
+  const DEFAULT_LIMIT = parseInt(root.dataset.defaultLimit, 10) || 18;
+  const modelsUrl = root.dataset.modelsUrl;
+  const keyName = root.dataset.keyField;
+  const isBrowser = root.dataset.browser === "1";
+  const modelsField = root.querySelector(".models-field");
+  const batchField = root.querySelector(".batch-field");
+  const limitField = root.querySelector(".limit-field");
   let dragEl = null;
 
+  const urlName = root.dataset.urlField;
+  function keyValue() {
+    const el = keyName ? document.querySelector("[name=" + keyName + "]") : null;
+    return el ? el.value : "";
+  }
+  function urlValue() {
+    const el = urlName ? document.querySelector("[name=" + urlName + "]") : null;
+    return el ? el.value : "";
+  }
   function sync(notify) {
     const items = [...ul.querySelectorAll("li")];
     modelsField.value = JSON.stringify(items.map((li) => li.dataset.model));
@@ -29,8 +41,7 @@
     li.draggable = true;
     li.addEventListener("dragstart", () => { dragEl = li; li.classList.add("drag"); });
     li.addEventListener("dragend", () => { li.classList.remove("drag"); sync(true); });
-    li.querySelector(".x").addEventListener("click", () => { li.remove(); sync(true); });
-    // The number fields stay editable/selectable: dragging them must not move the card.
+    li.querySelector(".x").addEventListener("click", () => { li.remove(); sync(true); markBrowser(); });
     li.querySelectorAll("input").forEach((inp) => {
       inp.addEventListener("input", () => sync(true));
       inp.addEventListener("mousedown", () => { li.draggable = false; });
@@ -41,7 +52,7 @@
   function exists(name) {
     return [...ul.querySelectorAll("li")].some((li) => li.dataset.model === name);
   }
-  function makeLi(name, batch, limit) {
+  function makeLi(name) {
     const li = document.createElement("li");
     li.dataset.model = name;
     li.innerHTML = '<span class="grip">⠿</span><span class="mname"></span>' +
@@ -49,14 +60,18 @@
       '<input type="number" class="mlimit" min="1" title="daily request limit">' +
       '<button type="button" class="x" title="Remove">×</button>';
     li.querySelector(".mname").textContent = name;
-    li.querySelector(".mbatch").value = batch || DEFAULT_BATCH;
-    li.querySelector(".mlimit").value = limit || DEFAULT_LIMIT;
+    li.querySelector(".mbatch").value = DEFAULT_BATCH;
+    li.querySelector(".mlimit").value = DEFAULT_LIMIT;
     wire(li);
     return li;
   }
   function add(name) {
     name = (name || "").trim();
-    if (name && !exists(name)) { ul.appendChild(makeLi(name, DEFAULT_BATCH, DEFAULT_LIMIT)); sync(true); }
+    if (name && !exists(name)) { ul.appendChild(makeLi(name)); sync(true); }
+  }
+  function remove(name) {
+    [...ul.querySelectorAll("li")].forEach((li) => { if (li.dataset.model === name) li.remove(); });
+    sync(true);
   }
 
   ul.addEventListener("dragover", (e) => {
@@ -72,29 +87,122 @@
   ul.querySelectorAll("li").forEach(wire);
   sync(false);
 
-  const input = document.getElementById("model-input");
-  document.getElementById("model-add-btn").addEventListener("click", () => { add(input.value); input.value = ""; });
+  const input = root.querySelector(".model-input");
+  const msg = root.querySelector(".model-msg");
+  root.querySelector(".model-add-btn").addEventListener("click", () => { add(input.value); input.value = ""; });
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); add(input.value); input.value = ""; } });
 
-  document.getElementById("model-refresh-btn").addEventListener("click", async () => {
-    const msg = document.getElementById("model-msg");
-    const keyEl = document.querySelector("[name=gemini_api_key]");
+  // ── OpenRouter-style browser (Free/Paid groups + search) ──
+  const browser = root.querySelector(".or-browser");
+  const results = browser ? browser.querySelector(".or-results") : null;
+  const searchEl = browser ? browser.querySelector(".or-search") : null;
+
+  function markBrowser() {
+    if (!results) return;
+    results.querySelectorAll(".or-row").forEach((r) => r.classList.toggle("added", exists(r.dataset.id)));
+  }
+  function renderGroup(title, list) {
+    if (!list.length) return "";
+    const rows = list.map((m) =>
+      '<button type="button" class="or-row" data-id="' + m.id.replace(/"/g, "&quot;") + '">' +
+      '<span class="or-id"></span><span class="or-name"></span></button>').join("");
+    return '<div class="or-group">' + title + ' <span class="hint">(' + list.length + ')</span></div>' + rows;
+  }
+  function applyFilter() {
+    const q = (searchEl.value || "").toLowerCase();
+    let groupVisible = {};
+    results.querySelectorAll(".or-row").forEach((r) => {
+      const hit = !q || r.dataset.id.toLowerCase().includes(q) || (r.dataset.name || "").toLowerCase().includes(q);
+      r.style.display = hit ? "" : "none";
+    });
+    // Hide a group header if everything under it is filtered out.
+    let rowsAfter = [];
+    [...results.children].reverse().forEach((el) => {
+      if (el.classList.contains("or-group")) {
+        const anyVisible = rowsAfter.some((r) => r.style.display !== "none");
+        el.style.display = anyVisible ? "" : "none";
+        rowsAfter = [];
+      } else { rowsAfter.push(el); }
+    });
+  }
+  if (browser) {
+    searchEl.addEventListener("input", (e) => { e.stopPropagation(); applyFilter(); });
+    searchEl.addEventListener("keydown", (e) => { if (e.key === "Enter") e.preventDefault(); });
+  }
+
+  root.querySelector(".model-refresh-btn").addEventListener("click", async () => {
     msg.textContent = "Fetching…"; msg.style.color = "";
     try {
-      const r = await fetch(MODELS_URL, {
+      const r = await fetch(modelsUrl, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_key: keyEl ? keyEl.value : "" }),
+        body: JSON.stringify({ api_key: keyValue(), base_url: urlValue() }),
       });
       const d = await r.json();
       if (!d.ok) { msg.textContent = "✗ " + d.error; msg.style.color = "var(--red)"; return; }
-      let added = 0, present = 0;
-      d.models.forEach((m) => { if (exists(m)) { present++; } else { ul.appendChild(makeLi(m, DEFAULT_BATCH, DEFAULT_LIMIT)); added++; } });
-      sync(true);
-      msg.textContent = "✓ " + d.models.length + " available · " + added + " added · " + present + " already in list";
-      msg.style.color = "var(--green)";
+
+      if (isBrowser) {
+        results.innerHTML = renderGroup("Free", d.free || []) + renderGroup("Paid", d.paid || []);
+        (d.free || []).concat(d.paid || []).forEach((m, i) => {
+          const row = results.querySelectorAll(".or-row")[i];
+          row.dataset.name = m.name || m.id;
+          row.querySelector(".or-id").textContent = m.id;
+          row.querySelector(".or-name").textContent = m.name && m.name !== m.id ? m.name : "";
+          row.addEventListener("click", () => {
+            if (exists(m.id)) remove(m.id); else add(m.id);
+            markBrowser();
+          });
+        });
+        markBrowser();
+        applyFilter();
+        browser.hidden = false;
+        searchEl.focus();
+        msg.textContent = "✓ " + (d.count || 0) + " models · " + (d.free || []).length + " free";
+        msg.style.color = "var(--green)";
+      } else {
+        let added = 0, present = 0;
+        (d.models || []).forEach((m) => { if (exists(m)) { present++; } else { ul.appendChild(makeLi(m)); added++; } });
+        sync(true);
+        msg.textContent = "✓ " + (d.models || []).length + " available · " + added + " added · " + present + " already in list";
+        msg.style.color = "var(--green)";
+      }
     } catch (e) { msg.textContent = "✗ " + e; msg.style.color = "var(--red)"; }
   });
+}
+document.querySelectorAll(".model-widget").forEach(initModelWidget);
+
+// ── Provider tabs (Gemini / OpenRouter …) ────────────────────────────────────
+(function () {
+  const tabs = [...document.querySelectorAll(".provider-tab")];
+  if (!tabs.length) return;
+  tabs.forEach((tab) => tab.addEventListener("click", () => {
+    const name = tab.dataset.providerTab;
+    tabs.forEach((t) => t.classList.toggle("active", t === tab));
+    document.querySelectorAll("[data-provider-panel]").forEach((p) => {
+      p.hidden = p.dataset.providerPanel !== name;
+    });
+  }));
 })();
+
+// ── Provider key tests (Gemini / OpenRouter) ─────────────────────────────────
+document.querySelectorAll("[data-test-provider]").forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    const provider = btn.dataset.testProvider;
+    const msg = btn.parentElement.querySelector(".test-msg");
+    const keyEl = document.querySelector("[name=" + provider + "_api_key]");
+    const urlName = btn.dataset.urlField;
+    const urlEl = urlName ? document.querySelector("[name=" + urlName + "]") : null;
+    msg.textContent = "Testing…"; msg.style.color = "";
+    try {
+      const r = await fetch(btn.dataset.testUrl, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: keyEl ? keyEl.value : "", base_url: urlEl ? urlEl.value : "" }),
+      });
+      const d = await r.json();
+      msg.textContent = (d.ok ? "✓ " : "✗ ") + d.message;
+      msg.style.color = d.ok ? "var(--green)" : "var(--red)";
+    } catch (e) { msg.textContent = "✗ " + e; msg.style.color = "var(--red)"; }
+  });
+});
 
 // ── Path mapping table ───────────────────────────────────────────────────────
 (function () {
@@ -145,26 +253,6 @@
   }
   document.getElementById("remap-detect").addEventListener("click", detect);
   detect();
-})();
-
-// ── Gemini key test ──────────────────────────────────────────────────────────
-(function () {
-  const btn = document.getElementById("gemini-test-btn");
-  if (!btn) return;
-  const msg = document.getElementById("gemini-test-msg");
-  btn.addEventListener("click", async () => {
-    const keyEl = document.querySelector("[name=gemini_api_key]");
-    msg.textContent = "Testing…"; msg.style.color = "";
-    try {
-      const r = await fetch("/api/gemini/test", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_key: keyEl ? keyEl.value : "" }),
-      });
-      const d = await r.json();
-      msg.textContent = (d.ok ? "✓ " : "✗ ") + d.message;
-      msg.style.color = d.ok ? "var(--green)" : "var(--red)";
-    } catch (e) { msg.textContent = "✗ " + e; msg.style.color = "var(--red)"; }
-  });
 })();
 
 // ── Auto-save ────────────────────────────────────────────────────────────────

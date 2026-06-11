@@ -1,0 +1,11 @@
+{
+  "name": "translaitarr2-telemetry",
+  "main": "src/index.js",
+  "compatibility_date": "2024-11-01",
+  "observability": { "enabled": true },
+  // Run `wrangler kv namespace create STATS` and paste the id here (or let the
+  // deploy step fill it). Binding name must stay STATS (used in src/index.js).
+  "kv_namespaces": [
+    { "binding": "STATS", "id": "1bf5613fd6d74a77bb35a98cf9607ad6" }
+  ]
+}

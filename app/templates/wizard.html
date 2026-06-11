@@ -27,12 +27,17 @@
       </div>
     </div>
 
+    {% from "partials/_model_widget.html" import model_widget %}
     <div class="card">
       <div class="step-title">2 · Gemini</div>
+      <p class="hint">Gemini is the default translation engine. You can add other providers (e.g. OpenRouter) later in Settings.</p>
       <label>API key</label>
       <input type="password" name="gemini_api_key" placeholder="AIza…">
-      <div class="toolbar" style="margin:8px 0"><button type="button" class="small" id="gemini-test-btn">Test key</button><span id="gemini-test-msg" class="hint"></span></div>
-      {% include "partials/_models.html" %}
+      <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="gemini" data-test-url="/api/gemini/test">Test key</button><span class="test-msg hint"></span></div>
+      {{ model_widget("gemini", cfg.gemini.models, cfg.gemini.model_batch, cfg.gemini.model_daily_limit,
+                      cfg.translation.batch_size, cfg.limits.max_daily_per_model,
+                      "models", "model_batch", "model_daily_limit",
+                      "/api/gemini/models", "gemini_api_key") }}
     </div>
 
     <div class="card">

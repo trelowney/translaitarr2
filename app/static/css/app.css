@@ -153,7 +153,7 @@ textarea { min-height: 78px; resize: vertical; font-family: ui-monospace, monosp
 .update-banner a { font-weight: 600; }
 
 /* Draggable model list */
-.model-list { list-style: none; margin: 0 0 8px; padding: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.model-list { list-style: none; margin: 0 0 8px; padding: 0; border: 1px solid var(--border); border-radius: 8px; overflow-y: auto; max-height: 360px; }
 .model-list li { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--bg); border-bottom: 1px solid var(--border); cursor: grab; }
 .model-list li:last-child { border-bottom: none; }
 .model-list li.drag { opacity: .45; }
@@ -176,6 +176,32 @@ textarea { min-height: 78px; resize: vertical; font-family: ui-monospace, monosp
 .model-head .mcol { width: 70px; text-align: center; }
 .model-head .spacer-x { width: 17px; }
 
+/* AI provider tabs + per-provider panels */
+.provider-tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+.provider-tab { background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-dim); padding: 8px 14px; font-size: 13.5px; font-weight: 600; border-radius: 0; }
+.provider-tab:hover { color: var(--text); border-color: var(--border); }
+.provider-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+
+/* OpenRouter model browser */
+.or-browser { margin-top: 10px; border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: var(--bg); }
+.or-search { width: 100%; margin-bottom: 8px; }
+.or-results { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.or-group { color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: .4px; font-weight: 700; padding: 10px 4px 4px; }
+.or-row { display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left; background: none; border: 1px solid transparent; border-radius: 6px; padding: 6px 9px; cursor: pointer; }
+.or-row:hover { background: var(--bg-elev-2); border-color: var(--border); }
+.or-row .or-id { font-family: ui-monospace, monospace; font-size: 12.5px; color: var(--text); }
+.or-row .or-name { font-size: 12px; color: var(--text-dim); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.or-row.added { border-color: var(--accent); background: rgba(255,255,255,.03); }
+.or-row.added .or-id::before { content: "✓ "; color: var(--green); }
+
+/* Example base-URL reference (OpenAI-compatible panel) */
+.examples { margin: 4px 0 14px; }
+.examples summary { cursor: pointer; color: var(--accent); font-size: 13px; width: max-content; }
+.examples table.kv { margin: 10px 0 4px; border-collapse: collapse; }
+.examples table.kv td { padding: 3px 12px 3px 0; vertical-align: top; font-size: 12.5px; }
+.examples table.kv td:first-child { color: var(--text-dim); white-space: nowrap; }
+.examples code { font-size: 12px; }
+
 .toast { position: fixed; bottom: 22px; right: 22px; background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text); padding: 11px 16px; border-radius: 9px; font-size: 13px; font-weight: 600; box-shadow: 0 6px 22px rgba(0,0,0,.45); opacity: 0; transform: translateY(10px); transition: opacity .2s, transform .2s; z-index: 200; pointer-events: none; }
 .toast.show { opacity: 1; transform: translateY(0); }
 .toast.ok { border-color: var(--green); }
@@ -192,6 +218,9 @@ td.actions form { display: inline; margin-right: 5px; }
 .sec { font-size: 15px; margin: 24px 0 10px; }
 .usage-models { margin: 8px 0; }
 .usage-models div { font-family: ui-monospace, monospace; font-size: 12.5px; color: var(--text-dim); padding: 1px 0; }
+.usage-providers { margin: 6px 0; }
+.usage-providers div { font-size: 12.5px; padding: 1px 0; }
+.usage-providers strong { color: var(--accent); }
 .usage-outcomes { margin-top: 8px; font-size: 13px; }
 .usage-sys { margin-top: 6px; }
 

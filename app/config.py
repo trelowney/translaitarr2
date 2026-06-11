@@ -18,6 +18,15 @@ LOG_FILE = os.path.join(CONFIG_DIR, "translaitarr2.log")
 # Field paths that must never be sent to the browser or written to logs.
 SECRET_PATHS = (
     ("gemini", "api_key"),
+    ("openrouter", "api_key"),
+    ("openai_compat", "api_key"),
+    ("anthropic", "api_key"),
+    ("cloudflare", "api_key"),
+    ("deepl", "api_key"),
+    ("libretranslate", "api_key"),
+    ("google", "api_key"),
+    ("azure", "api_key"),
+    ("yandex", "api_key"),
     ("arr", "sonarr", "api_key"),
     ("arr", "radarr", "api_key"),
     ("auth", "password_hash"),
@@ -60,6 +69,60 @@ DEFAULTS = {
         # for the day reaches this.
         "model_daily_limit": {},
     },
+    # OpenRouter — OpenAI-compatible gateway to many models. Empty by default;
+    # models are fetched from its API and chosen in the UI.
+    "openrouter": {
+        "api_key": "",
+        "models": [],
+        "model_batch": {},
+        "model_daily_limit": {},
+    },
+    # Generic OpenAI-compatible endpoint — covers local servers (Ollama, LM Studio,
+    # vLLM) and hosted ones (Groq, DeepSeek, OpenAI, Mistral…). Just point base_url
+    # at the server's /v1 and (optionally) supply a key. Empty by default.
+    "openai_compat": {
+        "api_key": "",
+        "base_url": "",
+        "models": [],
+        "model_batch": {},
+        "model_daily_limit": {},
+    },
+    # Anthropic Claude — native Messages API (its own request shape, not OpenAI).
+    # base_url defaults to the official endpoint; override via env for a gateway.
+    "anthropic": {
+        "api_key": "",
+        "base_url": "",
+        "models": [],
+        "model_batch": {},
+        "model_daily_limit": {},
+    },
+    # Cloudflare Workers AI — OpenAI-style inference addressed by account id (the
+    # base URL is derived from it). Free tier ≈ 10k neurons/day. api_key = a
+    # Workers-AI API token.
+    "cloudflare": {
+        "api_key": "",
+        "account_id": "",
+        "models": [],
+        "model_batch": {},
+        "model_daily_limit": {},
+    },
+    # DeepL — dedicated machine translation (not an LLM). Just an API key; the
+    # free vs paid endpoint is auto-detected from the key (free keys end in ':fx').
+    "deepl": {"api_key": ""},
+    # LibreTranslate — open-source/self-hostable MT. Point base_url at the server
+    # (e.g. http://host:5000); api_key is optional (only public/paid instances need one).
+    "libretranslate": {"api_key": "", "base_url": ""},
+    # Google Cloud Translation (v2) — just an API key.
+    "google": {"api_key": ""},
+    # Microsoft / Azure Translator — key + the resource region (e.g. westeurope).
+    "azure": {"api_key": "", "region": ""},
+    # Yandex Translate — API key + the cloud folder id.
+    "yandex": {"api_key": "", "folder_id": ""},
+    # Cloudflare m2m100 reuses the credentials from the "cloudflare" block above
+    # (no separate config) — it's the same account, just the translation model.
+    # AI provider priority: primary first, then secondary, then tertiary (each a
+    # provider name or "none"). Cross-provider fallback.
+    "ai": {"primary": "gemini", "secondary": "none", "tertiary": "none"},
     "languages": {
         "source_priority": ["eng", "fra", "deu", "spa"],
         "target": {"name": "Czech", "code": "cs"},
@@ -70,6 +133,10 @@ DEFAULTS = {
     "sdh": {"brackets": True, "parens": True, "music": True, "speaker": True, "uppercase": False},
     "limits": {"max_daily_per_model": 18, "max_daily_total": 120, "max_per_run": 10},
     "automation": {"enabled": False, "scan_interval_minutes": 30, "rpd_reset_tz": "America/Los_Angeles"},
+    # Anonymous active-instance counter. Opt-OUT (on by default). Sends ONLY a random
+    # instance id (generated once, stored here) + the app version, once a day. No paths,
+    # keys, library data or anything internal. See telemetry.py / README.
+    "telemetry": {"enabled": True, "instance_id": ""},
     "translation": {
         "api_timeout": 1200,
         "max_output_tokens": 65536,
@@ -125,6 +192,21 @@ def target_name_for(code):
 
 ENV_OVERRIDES = {
     "GEMINI_API_KEY": ("gemini", "api_key"),
+    "OPENROUTER_API_KEY": ("openrouter", "api_key"),
+    "OPENAI_COMPAT_API_KEY": ("openai_compat", "api_key"),
+    "OPENAI_COMPAT_BASE_URL": ("openai_compat", "base_url"),
+    "ANTHROPIC_API_KEY": ("anthropic", "api_key"),
+    "ANTHROPIC_BASE_URL": ("anthropic", "base_url"),
+    "CLOUDFLARE_API_TOKEN": ("cloudflare", "api_key"),
+    "CLOUDFLARE_ACCOUNT_ID": ("cloudflare", "account_id"),
+    "DEEPL_API_KEY": ("deepl", "api_key"),
+    "LIBRETRANSLATE_URL": ("libretranslate", "base_url"),
+    "LIBRETRANSLATE_API_KEY": ("libretranslate", "api_key"),
+    "GOOGLE_TRANSLATE_API_KEY": ("google", "api_key"),
+    "AZURE_TRANSLATOR_KEY": ("azure", "api_key"),
+    "AZURE_TRANSLATOR_REGION": ("azure", "region"),
+    "YANDEX_API_KEY": ("yandex", "api_key"),
+    "YANDEX_FOLDER_ID": ("yandex", "folder_id"),
     "SONARR_URL": ("arr", "sonarr", "url"),
     "SONARR_API_KEY": ("arr", "sonarr", "api_key"),
     "RADARR_URL": ("arr", "radarr", "url"),

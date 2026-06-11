@@ -3,10 +3,12 @@
 **AI subtitle translation for your media library — with a web UI and native Sonarr/Radarr integration.**
 
 translAItarr2 watches your Sonarr/Radarr library, finds video files that don't yet
-have a subtitle in your language, and translates one for them using Google Gemini.
-Unlike most subtitle-translation tools, it doesn't need a ready-made `.srt` lying
-around — it can **extract embedded subtitles from the video** and even **OCR
-Blu-ray (PGS) bitmap subtitles** into text before translating.
+have a subtitle in your language, and translates one for them using the AI engine of
+your choice — Google Gemini, OpenRouter, Anthropic Claude, Cloudflare Workers AI, a
+local model (Ollama/LM Studio/…), DeepL, and more. Unlike most subtitle-translation
+tools, it doesn't need a ready-made `.srt` lying around — it can **extract embedded
+subtitles from the video** and even **OCR Blu-ray (PGS) bitmap subtitles** into text
+before translating.
 
 > Status: **early development.** This README is written alongside the code and will
 > grow as features land. Expect rough edges.
@@ -38,16 +40,21 @@ translAItarr2 handles those cases:
 - **Native Sonarr/Radarr integration** via their REST API — real series / episode /
   movie titles, not raw file paths. **No webhook needed.** Path remapping is a guided
   table that auto-detects your *arr root folders.
-- **First-run setup wizard** — connect Sonarr/Radarr (with Test buttons), add your
-  Gemini key, pick source/target languages, optionally set a password. Nothing to hand-edit.
+- **First-run setup wizard** — connect Sonarr/Radarr (with Test buttons), add a
+  translation provider (e.g. your Gemini key), pick source/target languages, optionally
+  set a password. Nothing to hand-edit.
 - **Smart source selection** — translate the subtitle **embedded in the video** (text
   or Blu-ray **PGS via OCR**), or prefer an **external source `.srt`** next to the file;
   picks the best source language by your configured priority.
 - **Knows what a title already has** — skips files that already carry your target
   language and shows whether that's **audio (dub)**, **subtitles**, or both.
-- **Gemini, tuned for the free tier** — ordered model list (fetched from the API,
-  drag-to-reorder) with **per-model batch size and daily request limit**, automatic
-  fallback between models, and adaptive batching with an untranslated-output check.
+- **Your choice of translation engine — 12 providers** across LLMs (Gemini, OpenRouter,
+  Anthropic Claude, Cloudflare Workers AI, and any OpenAI-compatible / local server such
+  as Ollama, LM Studio, vLLM, Groq or DeepSeek) and dedicated machine translation (DeepL,
+  LibreTranslate, Google, Microsoft/Azure, Yandex, Cloudflare m2m100, keyless Google).
+  Pick a **primary plus two fallbacks** (fallback can cross providers), drag-reorder models
+  per provider with **per-model batch size and daily request limit**, or **override the
+  provider per job** from the Library. Tuned out of the box for Gemini's free tier.
 - **Automation** — optional periodic scan that translates anything new; re-translate
   automatically on a release upgrade, or manually per-title.
 - **Optional translation verification** — samples a finished translation and has the
@@ -55,10 +62,13 @@ translAItarr2 handles those cases:
   flags only genuinely wrong / untranslated lines; run it automatically or on demand.
 - **Quality options** — SDH/caption stripping, output sanity validation (drops junk
   cues), and a credit line on every file.
-- **Live queue** — jobs, today's per-model usage, outcome tallies, container CPU/RAM
-  and a live log, all auto-refreshing; Settings auto-save (no Save button).
-- **Privacy & safety first** — no telemetry; secrets stay in your local config volume,
-  redacted from logs; runs as a non-root user; in-app update check.
+- **Live queue** — jobs, today's per-model usage, **per-provider usage where available**
+  (DeepL characters left, OpenRouter credit), outcome tallies, container CPU/RAM and a live
+  log, all auto-refreshing; Settings auto-save (no Save button).
+- **Privacy & safety first** — secrets stay in your local config volume, redacted from
+  logs; runs as a non-root user; in-app update check. The only thing that ever leaves your
+  server is an **anonymous instance counter** (a random id + version, once a day) that you
+  can [turn off](#privacy--telemetry) — it carries nothing about you or your library.
 
 ## Roadmap
 
@@ -67,17 +77,18 @@ translAItarr2 is in **early development**. Rough plan:
 **Working now**
 - Sonarr/Radarr library view with real titles, grouped into Movies / TV Shows
 - Per-title, bulk and automatic translation; re-translate on release upgrade; manual re-translate
-- Google Gemini translation with model fallback, per-model batch sizes and per-model daily limits
+- **12 translation providers** (see [Translation providers](#translation-providers)) with
+  cross-provider fallback, per-model batch sizes/daily limits, and a **per-job provider override**
 - Embedded-subtitle extraction and PGS (Blu-ray) OCR
 - Selectable source: translate the **video's embedded subtitle** or **prefer an external `.srt`** next to it
 - Skip rules following your configured target language (shows whether a title already has target **audio**, **subtitles**, or both); SDH stripping; output validation
-- Setup wizard, optional password, auto-saving settings, live queue (usage + outcomes + CPU/RAM + log)
+- Setup wizard, optional password, auto-saving settings, live queue (usage + per-provider usage + outcomes + CPU/RAM + log)
 - Optional translation verification — model-judged so it tolerates paraphrase; automatic or on demand
 - Path remapping (UI), in-app update check, multi-arch Docker image
 
 **Planned (later)**
-- **More translation providers** — [OpenRouter.ai](https://openrouter.ai/), DeepL,
-  OpenAI-compatible / local models, Cloudflare Workers AI (choose your engine; Gemini stays the default)
+- **Per-provider system prompt / glossary** and **DeepL formality** (formal vs informal address) — for consistent names/terms across a series
+- More dedicated MT engines on the same path (the plumbing is generic now)
 - UI translations (i18n) — only if the community asks for it; then community-driven via Weblate (the app stays English-first, like Bazarr/Lingarr)
 
 ## Quick start
@@ -133,7 +144,7 @@ every field. Highlights:
 | Area        | What it controls                                                        |
 |-------------|-------------------------------------------------------------------------|
 | Sonarr/Radarr | API URL + key for each (used to list the library with proper titles). |
-| Gemini      | API key and an ordered list of models (tried in order on rate-limit).   |
+| AI providers | Up to three priority slots (primary + 2 fallbacks) across 12 providers; per-provider keys and model lists. See [Translation providers](#translation-providers). |
 | Languages   | Source-language priority order, and your single target language.        |
 | SDH         | Strip captions/sound effects/speaker labels before translating.         |
 | Limits      | Daily per-model and total request caps; max titles per automation run.  |
@@ -141,10 +152,42 @@ every field. Highlights:
 | Translation | Timeout, retries, context window, optional translator credit line.      |
 | Validation  | Min/max cue length and duration sanity checks on the output.            |
 
+### Translation providers
+
+Configure providers under **Settings → AI providers**. Each provider is its own tab; the
+priority slots at the top decide who translates: the worker exhausts the **primary** provider's
+models, then the **secondary**, then the **tertiary** (pick *None* to skip a slot). From the
+Library you can also **override the provider for a specific job**.
+
+**LLM providers** (prompt-based, best at idioms/context):
+
+| Provider | Setup | Notes |
+|---|---|---|
+| **Google Gemini** | API key | The default; tuned for the free tier (see below). |
+| **OpenRouter** | API key | 300+ models incl. free (`:free`) ones; built-in model browser. |
+| **OpenAI-compatible** | base URL (+ key) | Any OpenAI-style server — **local** Ollama / LM Studio / vLLM / LocalAI, or hosted Groq / DeepSeek / OpenAI / Mistral / xAI / Together. |
+| **Anthropic (Claude)** | API key | Native Claude Messages API. |
+| **Cloudflare Workers AI** | account ID + token | Runs on Cloudflare's edge; free tier ≈ 10k neurons/day. |
+
+**Dedicated machine translation** (fast, cheap, but no scene context):
+
+| Provider | Setup | Notes |
+|---|---|---|
+| **DeepL** | API key | Excellent quality; free tier = 500k chars/month. |
+| **LibreTranslate** | server URL (+ key) | Open-source, self-hostable (fully local & free). |
+| **Google Translate** | API key | Google Cloud Translation v2. |
+| **Microsoft / Azure** | key + region | Azure Translator. |
+| **Yandex** | key + folder id | Yandex Translate. |
+| **Cloudflare m2m100** | — | Reuses the Cloudflare tab's credentials; weakest quality. |
+| **Google Translate (free)** | — | Keyless/unofficial; no sign-up, poor quality, may rate-limit. |
+
+Tip: combine them — e.g. **DeepL as primary** with **a local Ollama model as fallback**, so you
+never hit a hard stop.
+
 ### Recommended Gemini models & batch size
 
-> translAItarr2 is developed and **tested primarily against Gemini's free-tier**
-> flash models — the defaults and limits are tuned for that.
+> translAItarr2's defaults and limits are **tuned for Gemini's free-tier** flash models. The
+> guidance below is Gemini-specific; other providers have their own per-model batch/limit fields.
 
 translAItarr2 sends subtitles to Gemini in **batches** (N cues per request) and tries
 your models top-to-bottom, falling back to the next one when a model is rate-limited.
@@ -191,6 +234,31 @@ replaced by a newer (upgraded) release.
 
 PGS OCR uses Tesseract (CPU-only) via [`pgsrip`](https://github.com/ratoaq2/pgsrip).
 Language data for English, French, German, and Spanish ships in the image.
+
+## Privacy & telemetry
+
+translAItarr2 keeps your data on your server. Your API keys live only in the mounted
+`config/` volume and are redacted from logs and the status page.
+
+The **one** exception is an **anonymous active-instance counter**, so the project can see
+roughly how many instances are out there. It is **on by default** but **opt-out** — a single
+checkbox at the bottom of **Settings** turns it off.
+
+**What it sends** (at most once a day):
+
+- a **random id** generated on your instance (a UUID stored in your config — not tied to you,
+  your account, or anything identifiable), and
+- the **app version**.
+
+**What it never sends or stores:** file paths, titles, your library, API keys, settings,
+counts, or IP addresses. A disabled instance sends nothing and doesn't even generate an id.
+The receiver is a small [Cloudflare Worker](telemetry-worker/) that only counts distinct ids
+seen in the last ~30 days. That's the whole feature — no analytics, no profiles, no tracking.
+
+The live count is public: **<https://translaitarr2-telemetry.trelowney.workers.dev/stats>**.
+The Worker's source is in [`telemetry-worker/`](telemetry-worker/).
+
+Prefer to set it via environment / Docker secret? `TELEMETRY=off` is honored too.
 
 ## License
 

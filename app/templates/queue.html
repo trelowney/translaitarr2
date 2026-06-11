@@ -7,8 +7,9 @@
 <div class="card">
   <h2>Today</h2>
   <div id="usage-line">
-    <div class="hint">Gemini requests today: <strong>{{ usage.total }}</strong> / {{ usage.limit }}</div>
+    <div class="hint">Translation requests today: <strong>{{ usage.total }}</strong> / {{ usage.limit }}</div>
     {% if usage.per_model %}<div class="usage-models">{% for m, s in usage.per_model.items() %}<div>{{ m }} <span class="hint">— {{ s.ok }} ok{% if s.fail %} · {{ s.fail }} failed{% endif %}</span></div>{% endfor %}</div>{% endif %}
+    {% if usage.providers %}<div class="usage-providers">{% for p in usage.providers %}<div><strong>{{ p.name }}</strong> <span class="hint">— {{ p.detail }}</span></div>{% endfor %}</div>{% endif %}
     <div class="usage-outcomes">✅ {{ usage.outcomes.translated }} translated · ⏭ {{ usage.outcomes.skipped }} skipped · ❌ {{ usage.outcomes.errors }} failed</div>
     <div class="usage-sys hint">CPU {{ usage.system.cpu_pct if usage.system.cpu_pct is not none else '—' }}% · RAM {{ usage.system.ram_mb if usage.system.ram_mb is not none else '—' }} MB</div>
   </div>
@@ -60,13 +61,16 @@
   function esc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : s; return d.innerHTML; }
 
   function usageHtml(u) {
-    let s = '<div class="hint">Gemini requests today: <strong>' + u.total + '</strong> / ' + u.limit + '</div>';
+    let s = '<div class="hint">Translation requests today: <strong>' + u.total + '</strong> / ' + u.limit + '</div>';
     const pm = u.per_model || {};
     const keys = Object.keys(pm);
     if (keys.length) s += '<div class="usage-models">' + keys.map((m) => {
       const st = pm[m] || { ok: 0, fail: 0 };
       return '<div>' + esc(m) + ' <span class="hint">— ' + st.ok + ' ok' + (st.fail ? ' · ' + st.fail + ' failed' : '') + '</span></div>';
     }).join("") + '</div>';
+    const prov = u.providers || [];
+    if (prov.length) s += '<div class="usage-providers">' + prov.map((p) =>
+      '<div><strong>' + esc(p.name) + '</strong> <span class="hint">— ' + esc(p.detail) + '</span></div>').join("") + '</div>';
     const o = u.outcomes || { translated: 0, skipped: 0, errors: 0 };
     s += '<div class="usage-outcomes">✅ ' + o.translated + ' translated · ⏭ ' + o.skipped + ' skipped · ❌ ' + o.errors + ' failed</div>';
     const sys = u.system || {};

@@ -1,0 +1,56 @@
+{# Reusable drag-to-reorder model list with per-model batch + daily limit.
+   Used for every AI provider (Gemini, OpenRouter, …). The JS in config.js
+   wires every .model-widget on the page from its data-* attributes. #}
+{% macro model_widget(provider, models, model_batch, model_daily_limit,
+                      default_batch, default_limit,
+                      name_models, name_batch, name_limit,
+                      models_url, key_field, browser=False, display="", url_field="") %}
+<div class="model-widget"
+     data-provider="{{ provider }}"
+     data-models-url="{{ models_url }}"
+     data-key-field="{{ key_field }}"
+     data-url-field="{{ url_field }}"
+     data-default-batch="{{ default_batch }}"
+     data-default-limit="{{ default_limit }}"
+     {% if browser %}data-browser="1"{% endif %}>
+  <label>{{ display or provider|capitalize }} models
+    <span class="hint">— drag to reorder (top = highest priority). Per model:
+      <b>batch</b> (cues/request) and <b>daily limit</b> (max requests/day)</span>
+  </label>
+  <div class="model-head">
+    <span class="grip" style="visibility:hidden">&#10303;</span>
+    <span class="mname">model</span>
+    <span class="mcol">batch</span>
+    <span class="mcol">limit/day</span>
+    <span class="spacer-x"></span>
+  </div>
+  <ul class="model-list">
+    {% for m in models %}
+    <li data-model="{{ m }}">
+      <span class="grip">&#10303;</span>
+      <span class="mname">{{ m }}</span>
+      <input type="number" class="mbatch" min="20" step="10" title="batch size (cues per request)"
+             value="{{ model_batch.get(m, default_batch) }}">
+      <input type="number" class="mlimit" min="1" title="daily request limit"
+             value="{{ model_daily_limit.get(m, default_limit) }}">
+      <button type="button" class="x" title="Remove">&times;</button>
+    </li>
+    {% endfor %}
+  </ul>
+  <input type="hidden" name="{{ name_models }}" class="models-field">
+  <input type="hidden" name="{{ name_batch }}" class="batch-field">
+  <input type="hidden" name="{{ name_limit }}" class="limit-field">
+  <div class="model-add">
+    <input type="text" class="model-input" placeholder="add a model id…" autocomplete="off">
+    <button type="button" class="small model-add-btn">Add</button>
+    <button type="button" class="small model-refresh-btn">{{ 'Browse models' if browser else 'Fetch from API' }}</button>
+    <span class="model-msg hint"></span>
+  </div>
+  {% if browser %}
+  <div class="or-browser" hidden>
+    <input type="text" class="or-search" placeholder="Search 300+ models…" autocomplete="off">
+    <div class="or-results"></div>
+  </div>
+  {% endif %}
+</div>
+{% endmacro %}

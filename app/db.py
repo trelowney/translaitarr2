@@ -36,6 +36,7 @@ def init_db():
             status      TEXT DEFAULT 'pending',
             force       INTEGER DEFAULT 0,
             action      TEXT DEFAULT 'translate',
+            provider    TEXT DEFAULT '',
             added_at    TEXT DEFAULT (datetime('now')),
             started_at  TEXT,
             finished_at TEXT,
@@ -58,6 +59,7 @@ def init_db():
     # Migrate DBs created before the 'force' column existed.
     for ddl in ("ALTER TABLE jobs ADD COLUMN force INTEGER DEFAULT 0",
                 "ALTER TABLE jobs ADD COLUMN action TEXT DEFAULT 'translate'",
+                "ALTER TABLE jobs ADD COLUMN provider TEXT DEFAULT ''",
                 "ALTER TABLE model_daily_calls ADD COLUMN fails INTEGER DEFAULT 0"):
         try:
             conn.execute(ddl)
@@ -69,7 +71,7 @@ def init_db():
 
 # ── Jobs ──────────────────────────────────────────────────────────────────────
 
-def add_job(file_path, title="", source="manual", force=False, action="translate"):
+def add_job(file_path, title="", source="manual", force=False, action="translate", provider=""):
     """Queue a file. Returns (added, id). Skips if already pending/processing
     for the same action."""
     conn = get_db()
@@ -81,8 +83,8 @@ def add_job(file_path, title="", source="manual", force=False, action="translate
         conn.close()
         return False, existing["id"]
     cur = conn.execute(
-        "INSERT INTO jobs (file_path, title, source, force, action) VALUES (?, ?, ?, ?, ?)",
-        (file_path, title, source, 1 if force else 0, action),
+        "INSERT INTO jobs (file_path, title, source, force, action, provider) VALUES (?, ?, ?, ?, ?, ?)",
+        (file_path, title, source, 1 if force else 0, action, provider or ""),
     )
     conn.commit()
     jid = cur.lastrowid
@@ -117,10 +119,11 @@ def prune_jobs(keep=20):
 def get_next_pending():
     conn = get_db()
     row = conn.execute(
-        "SELECT id, file_path, title, force, action FROM jobs WHERE status='pending' ORDER BY id LIMIT 1"
+        "SELECT id, file_path, title, force, action, provider FROM jobs WHERE status='pending' ORDER BY id LIMIT 1"
     ).fetchone()
     conn.close()
-    return (row["id"], row["file_path"], row["title"], bool(row["force"]), row["action"]) if row else None
+    return (row["id"], row["file_path"], row["title"], bool(row["force"]), row["action"],
+            row["provider"] or "") if row else None
 
 
 def set_status(job_id, status, result=None, error=None):

@@ -44,11 +44,17 @@ def _loop():
             time.sleep(10)
             continue
 
-        job_id, path, title, force, action = job
+        job_id, path, title, force, action, provider = job
         cfg = cfgmod.load_config()
 
-        if not cfg["gemini"].get("api_key"):
-            log.warning("No Gemini API key configured — worker idle")
+        # Per-job provider override: pin this job to one provider, no fallback.
+        if provider and provider in translator.PROVIDERS:
+            cfg["ai"] = {"primary": provider, "secondary": "none", "tertiary": "none"}
+
+        chain = translator.provider_chain(cfg)
+        if not chain or not any(translator.provider_configured(cfg, p) for p, *_ in chain):
+            who = provider or (chain[0][0] if chain else "any")
+            log.warning("No usable translation provider configured (%s) — worker idle", who)
             time.sleep(30)
             continue
 

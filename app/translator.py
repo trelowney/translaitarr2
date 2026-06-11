@@ -224,16 +224,365 @@ def list_available_models(api_key):
     return flash + rest
 
 
-def call_gemini_once(srt_path, src_lang, tgt_lang, model, cfg):
-    """Single Gemini call. Returns (clean_srt_text, finish_reason). Raises GeminiError."""
-    api_key = cfg["gemini"]["api_key"]
-    timeout = cfg["translation"].get("api_timeout", 1200)
-    max_tokens = cfg["translation"].get("max_output_tokens", 65536)
+def list_openrouter_models(api_key=""):
+    """OpenRouter's catalogue (public endpoint, no credit used). Returns
+    [{id, name, free}] — free = a $0 (':free') model."""
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    r = requests.get("https://openrouter.ai/api/v1/models", headers=headers, timeout=12)
+    r.raise_for_status()
+    out = []
+    for m in r.json().get("data", []):
+        mid = m.get("id", "")
+        if not mid:
+            continue
+        pr = m.get("pricing", {}) or {}
+        free = mid.endswith(":free") or (
+            str(pr.get("prompt", "")) in ("0", "0.0") and str(pr.get("completion", "")) in ("0", "0.0"))
+        out.append({"id": mid, "name": m.get("name", mid), "free": free})
+    return out
 
-    with open(srt_path, encoding="utf-8") as f:
-        srt_content = f.read()
 
-    prompt = (
+def openrouter_key_info(api_key):
+    """Validate an OpenRouter key; returns its info (limit/usage). Raises on error."""
+    r = requests.get("https://openrouter.ai/api/v1/key",
+                     headers={"Authorization": f"Bearer {api_key}"}, timeout=10)
+    r.raise_for_status()
+    return r.json().get("data", {})
+
+
+def openrouter_credits(api_key):
+    """Account credit balance (not the per-key limit, which is usually unset).
+    Returns {total, usage}; remaining = total - usage. Raises on error."""
+    r = requests.get("https://openrouter.ai/api/v1/credits",
+                     headers={"Authorization": f"Bearer {api_key}"}, timeout=10)
+    r.raise_for_status()
+    d = r.json().get("data", {})
+    return {"total": float(d.get("total_credits", 0)), "usage": float(d.get("total_usage", 0))}
+
+
+def normalize_openai_base(url):
+    """Be lenient about what the user pastes: accept either the `/v1` base or the
+    full `/v1/chat/completions` URL (Lingarr-style), returning the bare base."""
+    base = (url or "").strip().rstrip("/")
+    if base.endswith("/chat/completions"):
+        base = base[: -len("/chat/completions")]
+    return base
+
+
+def list_openai_models(base_url, api_key=""):
+    """Model ids from any OpenAI-compatible endpoint (Ollama, LM Studio, vLLM,
+    Groq, DeepSeek…). GET {base_url}/models. Returns a flat list of ids."""
+    base = normalize_openai_base(base_url)
+    if not base:
+        raise ValueError("base URL is required")
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    r = requests.get(f"{base}/models", headers=headers, timeout=12)
+    r.raise_for_status()
+    payload = r.json()
+    data = payload.get("data") or payload.get("models") or []
+    ids = []
+    for m in data:
+        mid = (m.get("id") or m.get("name")) if isinstance(m, dict) else m
+        if mid:
+            ids.append(mid)
+    return ids
+
+
+def cloudflare_base(account_id):
+    return f"https://api.cloudflare.com/client/v4/accounts/{(account_id or '').strip()}/ai/v1"
+
+
+def list_cloudflare_models(account_id, api_key):
+    """Workers AI text-generation models via Cloudflare's native catalogue
+    (GET /accounts/{id}/ai/models/search) — CF's OpenAI `/v1/models` path 405s.
+    Returns @cf/ ids."""
+    acct = (account_id or "").strip()
+    r = requests.get(f"https://api.cloudflare.com/client/v4/accounts/{acct}/ai/models/search",
+                     headers={"Authorization": f"Bearer {api_key}"},
+                     params={"per_page": 200, "task": "Text Generation"}, timeout=12)
+    r.raise_for_status()
+    out = []
+    for m in r.json().get("result", []):
+        name = m.get("name")
+        task = (m.get("task") or {}).get("name", "")
+        if name and task == "Text Generation":
+            out.append(name)
+    return out
+
+
+def list_anthropic_models(api_key, base_url=""):
+    """Claude models via the native Anthropic Models API (GET /v1/models). Free,
+    no tokens spent. Returns a flat list of ids."""
+    base = (base_url or "https://api.anthropic.com").rstrip("/")
+    r = requests.get(f"{base}/v1/models",
+                     headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"}, timeout=12)
+    r.raise_for_status()
+    return [m.get("id") for m in r.json().get("data", []) if m.get("id")]
+
+
+# ── DeepL (dedicated machine translation, not an LLM) ─────────────────────────
+# DeepL uses uppercase codes; the target sometimes needs a regional variant.
+DEEPL_TARGET = {
+    "cs": "CS", "sk": "SK", "en": "EN-US", "de": "DE", "fr": "FR", "es": "ES",
+    "it": "IT", "pt": "PT-PT", "pl": "PL", "nl": "NL", "ru": "RU", "uk": "UK",
+    "ja": "JA", "ko": "KO", "zh": "ZH", "ro": "RO", "el": "EL", "tr": "TR",
+    "sv": "SV", "da": "DA", "fi": "FI", "no": "NB", "hu": "HU", "bg": "BG",
+}
+DEEPL_SOURCE = {
+    "english": "EN", "czech": "CS", "french": "FR", "german": "DE", "spanish": "ES",
+    "italian": "IT", "portuguese": "PT", "polish": "PL", "dutch": "NL", "russian": "RU",
+}
+
+
+def _deepl_base(api_key):
+    # Free-tier keys end in ':fx' and use a different host.
+    return "https://api-free.deepl.com" if api_key.strip().endswith(":fx") else "https://api.deepl.com"
+
+
+def deepl_usage(api_key):
+    """DeepL character usage/limit for the current period (also validates the key)."""
+    r = requests.get(f"{_deepl_base(api_key)}/v2/usage",
+                     headers={"Authorization": f"DeepL-Auth-Key {api_key.strip()}"}, timeout=10)
+    r.raise_for_status()
+    d = r.json()
+    return {"count": int(d.get("character_count", 0)), "limit": int(d.get("character_limit", 0))}
+
+
+def _deepl_translate(texts, target_code, source_name, cfg):
+    """Translate a list of strings via DeepL; returns a same-length, same-order list."""
+    key = cfg["deepl"]["api_key"].strip()
+    if not key:
+        raise GeminiError("000", "DeepL API key is not set")
+    body = {"text": texts, "target_lang": DEEPL_TARGET.get(target_code, target_code.upper())}
+    src = DEEPL_SOURCE.get((source_name or "").lower())
+    if src:
+        body["source_lang"] = src
+    try:
+        r = requests.post(f"{_deepl_base(key)}/v2/translate", json=body,
+                          timeout=cfg["translation"].get("api_timeout", 1200),
+                          headers={"Authorization": f"DeepL-Auth-Key {key}",
+                                   "Content-Type": "application/json"})
+    except requests.RequestException as e:
+        raise GeminiError("000", f"network error: {e}") from e
+    if r.status_code != 200:
+        try:
+            err = r.json().get("message", r.text[:300])
+        except ValueError:
+            err = r.text[:300]
+        raise GeminiError(str(r.status_code), f"HTTP {r.status_code}: {err}")
+    return [t.get("text", "") for t in r.json().get("translations", [])]
+
+
+# ── LibreTranslate (open-source / self-hostable MT) ──────────────────────────
+LIBRE_SOURCE = {
+    "english": "en", "czech": "cs", "french": "fr", "german": "de", "spanish": "es",
+    "italian": "it", "portuguese": "pt", "polish": "pl", "dutch": "nl", "russian": "ru",
+}
+
+
+def libretranslate_languages(base_url, api_key=""):
+    """Languages a LibreTranslate server supports (also validates the URL/key)."""
+    base = (base_url or "").strip().rstrip("/")
+    if not base:
+        raise ValueError("base URL is required")
+    params = {"api_key": api_key.strip()} if api_key and api_key.strip() else {}
+    r = requests.get(f"{base}/languages", params=params, timeout=10)
+    r.raise_for_status()
+    return [m.get("code") for m in r.json() if isinstance(m, dict) and m.get("code")]
+
+
+def _libretranslate_translate(texts, target_code, source_name, cfg):
+    """Translate a list of strings via LibreTranslate; same-length, same-order list."""
+    base = (cfg["libretranslate"].get("base_url") or "").strip().rstrip("/")
+    if not base:
+        raise GeminiError("000", "LibreTranslate base URL is not set")
+    body = {"q": texts, "source": LIBRE_SOURCE.get((source_name or "").lower(), "auto"),
+            "target": target_code, "format": "text"}
+    key = (cfg["libretranslate"].get("api_key") or "").strip()
+    if key:
+        body["api_key"] = key
+    try:
+        r = requests.post(f"{base}/translate", json=body,
+                          timeout=cfg["translation"].get("api_timeout", 1200),
+                          headers={"Content-Type": "application/json"})
+    except requests.RequestException as e:
+        raise GeminiError("000", f"network error: {e}") from e
+    if r.status_code != 200:
+        try:
+            err = r.json().get("error", r.text[:300])
+        except ValueError:
+            err = r.text[:300]
+        raise GeminiError(str(r.status_code), f"HTTP {r.status_code}: {err}")
+    tr = r.json().get("translatedText", [])
+    return [tr] if isinstance(tr, str) else tr
+
+
+# ── More MT engines (Google, Azure, Yandex, Cloudflare m2m100, keyless GTranslate) ──
+def _mt_lang(name):
+    """Source language name -> ISO-639-1 code, or None to let the engine auto-detect."""
+    return LIBRE_SOURCE.get((name or "").lower())
+
+
+def _http_err(r):
+    try:
+        j = r.json()
+        e = j.get("error")
+        msg = (e.get("message") if isinstance(e, dict) else e) or j.get("message") or r.text[:300]
+    except ValueError:
+        msg = r.text[:300]
+    return f"HTTP {r.status_code}: {msg}"
+
+
+def _google_translate(texts, target_code, source_name, cfg):
+    """Google Cloud Translation v2 (official, API key)."""
+    key = (cfg["google"].get("api_key") or "").strip()
+    if not key:
+        raise GeminiError("000", "Google API key is not set")
+    body = {"q": texts, "target": target_code, "format": "text"}
+    src = _mt_lang(source_name)
+    if src:
+        body["source"] = src
+    try:
+        r = requests.post("https://translation.googleapis.com/language/translate/v2",
+                          params={"key": key}, json=body,
+                          timeout=cfg["translation"].get("api_timeout", 1200))
+    except requests.RequestException as e:
+        raise GeminiError("000", f"network error: {e}") from e
+    if r.status_code != 200:
+        raise GeminiError(str(r.status_code), _http_err(r))
+    return [t.get("translatedText", "") for t in r.json().get("data", {}).get("translations", [])]
+
+
+def _azure_translate(texts, target_code, source_name, cfg):
+    """Microsoft / Azure Translator (key + resource region)."""
+    key = (cfg["azure"].get("api_key") or "").strip()
+    if not key:
+        raise GeminiError("000", "Azure Translator key is not set")
+    params = {"api-version": "3.0", "to": target_code}
+    src = _mt_lang(source_name)
+    if src:
+        params["from"] = src
+    headers = {"Ocp-Apim-Subscription-Key": key, "Content-Type": "application/json"}
+    region = (cfg["azure"].get("region") or "").strip()
+    if region:
+        headers["Ocp-Apim-Subscription-Region"] = region
+    try:
+        r = requests.post("https://api.cognitive.microsofttranslator.com/translate",
+                          params=params, json=[{"Text": t} for t in texts], headers=headers,
+                          timeout=cfg["translation"].get("api_timeout", 1200))
+    except requests.RequestException as e:
+        raise GeminiError("000", f"network error: {e}") from e
+    if r.status_code != 200:
+        raise GeminiError(str(r.status_code), _http_err(r))
+    return ["".join(x.get("text", "") for x in item.get("translations", [])) for item in r.json()]
+
+
+def _yandex_translate(texts, target_code, source_name, cfg):
+    """Yandex Translate (API key + cloud folder id)."""
+    key = (cfg["yandex"].get("api_key") or "").strip()
+    if not key:
+        raise GeminiError("000", "Yandex API key is not set")
+    body = {"texts": texts, "targetLanguageCode": target_code}
+    folder = (cfg["yandex"].get("folder_id") or "").strip()
+    if folder:
+        body["folderId"] = folder
+    src = _mt_lang(source_name)
+    if src:
+        body["sourceLanguageCode"] = src
+    try:
+        r = requests.post("https://translate.api.cloud.yandex.net/translate/v2/translate",
+                          json=body, headers={"Authorization": f"Api-Key {key}",
+                                              "Content-Type": "application/json"},
+                          timeout=cfg["translation"].get("api_timeout", 1200))
+    except requests.RequestException as e:
+        raise GeminiError("000", f"network error: {e}") from e
+    if r.status_code != 200:
+        raise GeminiError(str(r.status_code), _http_err(r))
+    return [t.get("text", "") for t in r.json().get("translations", [])]
+
+
+def _cf_m2m100_translate(texts, target_code, source_name, cfg):
+    """Cloudflare Workers AI m2m100 — reuses the 'cloudflare' block's credentials.
+    Takes one text per call (no batch array), so it issues one request per cue."""
+    acct = (cfg["cloudflare"].get("account_id") or "").strip()
+    key = (cfg["cloudflare"].get("api_key") or "").strip()
+    if not (acct and key):
+        raise GeminiError("000", "Set your Cloudflare account ID + token in the Cloudflare tab first")
+    src = _mt_lang(source_name) or "en"
+    url = f"https://api.cloudflare.com/client/v4/accounts/{acct}/ai/run/@cf/meta/m2m100-1.2b"
+    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    out = []
+    for t in texts:
+        try:
+            r = requests.post(url, json={"text": t, "source_lang": src, "target_lang": target_code},
+                              headers=headers, timeout=cfg["translation"].get("api_timeout", 1200))
+        except requests.RequestException as e:
+            raise GeminiError("000", f"network error: {e}") from e
+        if r.status_code != 200:
+            raise GeminiError(str(r.status_code), _http_err(r))
+        out.append(r.json().get("result", {}).get("translated_text", ""))
+    return out
+
+
+def _gtranslate_free(texts, target_code, source_name, cfg):
+    """Unofficial keyless Google endpoint (no auth). Low quality and may rate-limit —
+    a best-effort 'works without signing up' option. One request per cue."""
+    src = _mt_lang(source_name) or "auto"
+    out = []
+    for t in texts:
+        try:
+            r = requests.get("https://translate.googleapis.com/translate_a/single",
+                             params={"client": "gtx", "sl": src, "tl": target_code, "dt": "t", "q": t},
+                             timeout=cfg["translation"].get("api_timeout", 1200))
+        except requests.RequestException as e:
+            raise GeminiError("000", f"network error: {e}") from e
+        if r.status_code != 200:
+            raise GeminiError(str(r.status_code), _http_err(r))
+        seg = r.json()[0] or []
+        out.append("".join(s[0] for s in seg if s and s[0]))
+    return out
+
+
+# Per-engine batch size + translate fn for the MT path.
+_MT_ENGINES = {
+    "deepl": (50, _deepl_translate),
+    "libretranslate": (25, _libretranslate_translate),
+    "google": (100, _google_translate),
+    "azure": (50, _azure_translate),
+    "yandex": (50, _yandex_translate),
+    "cf_m2m100": (50, _cf_m2m100_translate),
+    "gtranslate_free": (20, _gtranslate_free),
+}
+
+
+def mt_probe(provider, cfg):
+    """Translate a one-word probe ('OK') to validate an MT engine's credentials.
+    Returns the translated string."""
+    _, fn = _MT_ENGINES[provider]
+    out = fn(["OK"], cfg["languages"]["target"]["code"], "English", cfg)
+    return out[0] if out else ""
+
+
+def mt_translate_chunk(provider, srt_path, src_lang, tgt_lang, cfg):
+    """Translate an SRT chunk with a dedicated MT engine (DeepL, LibreTranslate…).
+    Parses the cues, sends their text as batches, and rebuilds an SRT with the same
+    numbers/timecodes — so _translate_all's count-matching accept logic is unchanged."""
+    batch, translate_fn = _MT_ENGINES[provider]
+    entries = parse_srt(srt_path)
+    texts = ["\n".join(t) for _, _, t in entries]
+    target_code = cfg["languages"]["target"]["code"]
+    log.info("%s -> %s entries (target %s)", provider, len(entries), target_code)
+    out = []
+    for i in range(0, len(texts), batch):
+        out.extend(translate_fn(texts[i:i + batch], target_code, src_lang, cfg))
+    if len(out) != len(entries):
+        raise GeminiError("000", f"{provider} returned {len(out)} of {len(entries)} translations")
+    parts = [f"{num}\n{tc}\n{(tr or '').strip()}\n" for (num, tc, _), tr in zip(entries, out)]
+    return "\n".join(parts), "stop"
+
+
+def _translation_prompt(srt_content, src_lang, tgt_lang):
+    return (
         f"Translate subtitles from {src_lang} to {tgt_lang}.\n"
         "Use natural, conversational language as spoken in movies and TV shows.\n"
         "Preserve character personality, emotions, and informal speech.\n"
@@ -250,83 +599,226 @@ def call_gemini_once(srt_path, src_lang, tgt_lang, model, cfg):
         "- Output must have EXACTLY the same number of entries as input.\n\n"
         f"SRT to translate:\n\n{srt_content}"
     )
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-    body = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.25, "maxOutputTokens": max_tokens},
-    }
 
-    log.info("Gemini -> %s: %s entries", model, count_entries(srt_path))
-    t0 = time.time()
+
+def _complete(provider, model, prompt, cfg, max_tokens=None):
+    """Raw text generation for a provider. Returns (text, finish_reason). Raises
+    GeminiError (the fallback reacts to its http_code)."""
+    if provider in MT_PROVIDERS:
+        raise GeminiError("000", f"{provider} is a translation engine, not a text model")
+    timeout = cfg["translation"].get("api_timeout", 1200)
+    if max_tokens is None:
+        max_tokens = cfg["translation"].get("max_output_tokens", 65536)
+
+    if provider in ("openrouter", "openai_compat", "cloudflare"):
+        # All speak the OpenAI /chat/completions shape; only base_url + headers differ.
+        if provider == "openrouter":
+            base = "https://openrouter.ai/api/v1"
+            key = cfg["openrouter"]["api_key"]
+            extra = {"HTTP-Referer": "https://github.com/trelowney/translaitarr2",
+                     "X-Title": "translAItarr2"}
+        elif provider == "cloudflare":
+            acct = (cfg["cloudflare"].get("account_id") or "").strip()
+            if not acct:
+                raise GeminiError("000", "Cloudflare account ID is not set")
+            base = cloudflare_base(acct)
+            key = cfg["cloudflare"].get("api_key", "")
+            extra = {}
+        else:
+            base = normalize_openai_base(cfg["openai_compat"].get("base_url"))
+            key = cfg["openai_compat"].get("api_key", "")
+            extra = {}
+            if not base:
+                raise GeminiError("000", "OpenAI-compatible base URL is not set")
+        # Unlike Gemini (where maxOutputTokens is separate from the context window),
+        # many OpenAI-style endpoints share one context budget for input+output, so
+        # asking for the full 65536-token output overflows the window. Cap the output
+        # to comfortably hold a subtitle batch; truncation is handled by the
+        # MAX_TOKENS retry path, the same as Gemini.
+        max_tokens = min(max_tokens, 16384)
+        body = {"model": model, "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.25, "max_tokens": max_tokens}
+        headers = {"Content-Type": "application/json", **extra}
+        if key:  # local servers (Ollama/LM Studio) usually need no auth
+            headers["Authorization"] = f"Bearer {key}"
+        try:
+            r = requests.post(f"{base}/chat/completions", json=body, timeout=timeout, headers=headers)
+        except requests.RequestException as e:
+            raise GeminiError("000", f"network error: {e}") from e
+        if r.status_code != 200:
+            try:
+                err = r.json().get("error", {}).get("message", r.text[:300])
+            except ValueError:
+                err = r.text[:300]
+            raise GeminiError(str(r.status_code), f"HTTP {r.status_code}: {err}")
+        ch = (r.json().get("choices") or [{}])[0]
+        finish = "MAX_TOKENS" if ch.get("finish_reason") == "length" else ch.get("finish_reason", "?")
+        return (ch.get("message") or {}).get("content", ""), finish
+
+    if provider == "anthropic":
+        # Native Anthropic Messages API — its own request shape, not OpenAI.
+        base = (cfg["anthropic"].get("base_url") or "https://api.anthropic.com").rstrip("/")
+        key = cfg["anthropic"].get("api_key", "")
+        max_tokens = min(max_tokens, 16384)  # also keeps non-streaming under the timeout
+        # No temperature: Opus 4.7/4.8 reject sampling params; the default is fine for subtitles.
+        body = {"model": model, "max_tokens": max_tokens,
+                "messages": [{"role": "user", "content": prompt}]}
+        headers = {"x-api-key": key, "anthropic-version": "2023-06-01",
+                   "Content-Type": "application/json"}
+        try:
+            r = requests.post(f"{base}/v1/messages", json=body, timeout=timeout, headers=headers)
+        except requests.RequestException as e:
+            raise GeminiError("000", f"network error: {e}") from e
+        if r.status_code != 200:
+            try:
+                err = r.json().get("error", {}).get("message", r.text[:300])
+            except ValueError:
+                err = r.text[:300]
+            raise GeminiError(str(r.status_code), f"HTTP {r.status_code}: {err}")
+        data = r.json()
+        text = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
+        finish = "MAX_TOKENS" if data.get("stop_reason") == "max_tokens" else data.get("stop_reason", "?")
+        return text, finish
+
+    # gemini (default)
+    key = cfg["gemini"]["api_key"]
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    body = {"contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.25, "maxOutputTokens": max_tokens}}
     try:
-        r = requests.post(
-            url, json=body, timeout=timeout,
-            headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
-        )
+        r = requests.post(url, json=body, timeout=timeout,
+                          headers={"x-goog-api-key": key, "Content-Type": "application/json"})
     except requests.RequestException as e:
         raise GeminiError("000", f"network error: {e}") from e
-    log.info("Gemini <- HTTP %s in %.1fs", r.status_code, time.time() - t0)
-
     if r.status_code != 200:
         try:
             err = r.json().get("error", {}).get("message", r.text[:300])
         except ValueError:
             err = r.text[:300]
         raise GeminiError(str(r.status_code), f"HTTP {r.status_code}: {err}")
-
-    data = r.json()
-    cand = (data.get("candidates") or [{}])[0]
+    cand = (r.json().get("candidates") or [{}])[0]
     finish = cand.get("finishReason", "?")
-    usage = data.get("usageMetadata", {})
-    log.info("Tokens: in=%s out=%s finish=%s",
-             usage.get("promptTokenCount", "?"), usage.get("candidatesTokenCount", "?"), finish)
+    return (cand.get("content", {}).get("parts") or [{}])[0].get("text", ""), finish
+
+
+def call_model_once(provider, model, srt_path, src_lang, tgt_lang, cfg):
+    """Translate one SRT chunk with provider+model. Returns (clean_srt, finish)."""
+    with open(srt_path, encoding="utf-8") as f:
+        srt_content = f.read()
+    prompt = _translation_prompt(srt_content, src_lang, tgt_lang)
+    log.info("%s -> %s: %s entries", provider, model, count_entries(srt_path))
+    t0 = time.time()
+    text, finish = _complete(provider, model, prompt, cfg)
+    log.info("%s <- finish=%s in %.1fs", provider, finish, time.time() - t0)
     if finish == "MAX_TOKENS":
         log.warning("MAX_TOKENS — output truncated, will retry missing entries")
-
-    translated = (cand.get("content", {}).get("parts") or [{}])[0].get("text", "")
-    if not translated:
-        raise GeminiError("000", "empty response from Gemini")
-
-    clean = re.sub(r"^```[^\n]*\n?|```$", "", translated, flags=re.MULTILINE)
-    srt_start = re.search(r"^\d+\r?\n\d{2}:\d{2}:\d{2},\d{3}", clean, re.MULTILINE)
-    if srt_start:
-        clean = clean[srt_start.start():]
+    if not text:
+        raise GeminiError("000", "empty response")
+    clean = re.sub(r"^```[^\n]*\n?|```$", "", text, flags=re.MULTILINE)
+    m = re.search(r"^\d+\r?\n\d{2}:\d{2}:\d{2},\d{3}", clean, re.MULTILINE)
+    if m:
+        clean = clean[m.start():]
     return clean, finish
 
 
-def call_gemini_with_fallback(srt_path, src_lang, tgt_lang, cfg, usage, fails):
-    """Try each configured model in order; skip any that has reached its daily
-    limit, fall back on 5xx/429/000. Mutates ``usage`` (successful calls/model) and
-    ``fails`` (failed batch attempts/model)."""
-    order = cfg["gemini"].get("models") or DEFAULT_MODELS
-    default_limit = cfg["limits"].get("max_daily_per_model", 18)
-    per_model = cfg["gemini"].get("model_daily_limit", {})
-    last_err = None
-    for model in order:
-        limit = per_model.get(model, default_limit)
-        if usage.get(model, 0) >= limit:
-            log.info("Model %s at daily limit (%s) — skipping", model, limit)
+PROVIDERS = ("gemini", "openrouter", "openai_compat", "anthropic", "cloudflare",
+             "deepl", "libretranslate", "google", "azure", "yandex",
+             "cf_m2m100", "gtranslate_free")
+# Dedicated machine-translation engines (not LLMs): translate text segments, no
+# prompt/model list. Routed through mt_translate_chunk instead of _complete.
+MT_PROVIDERS = ("deepl", "libretranslate", "google", "azure", "yandex",
+                "cf_m2m100", "gtranslate_free")
+RETRIABLE = ("500", "502", "503", "504", "429", "000", "401", "402")
+
+
+def provider_configured(cfg, p):
+    """True if provider p has enough credentials/config to actually translate."""
+    g = cfg.get(p, {})
+    if p == "gtranslate_free":
+        return True
+    if p == "cf_m2m100":
+        return bool(cfg["cloudflare"].get("account_id") and cfg["cloudflare"].get("api_key"))
+    if p in ("deepl", "google", "azure", "yandex"):
+        return bool(g.get("api_key"))
+    if p == "libretranslate":
+        return bool(g.get("base_url"))
+    if p == "openai_compat":
+        return bool(g.get("base_url") and g.get("models"))
+    if p == "cloudflare":
+        return bool(g.get("account_id") and g.get("api_key") and g.get("models"))
+    # gemini, openrouter, anthropic — need an API key and at least one model
+    return bool(g.get("api_key") and g.get("models"))
+
+
+def configured_providers(cfg):
+    """Providers that are ready to translate (for the per-job picker)."""
+    return [p for p in PROVIDERS if provider_configured(cfg, p)]
+
+
+def provider_chain(cfg):
+    """Ordered [(provider, models, default_limit, per_model_limits)] from the ai
+    priority slots. Falls back to gemini if nothing is configured (back-compat)."""
+    ai = cfg.get("ai", {})
+    chain, seen = [], set()
+    for slot in ("primary", "secondary", "tertiary"):
+        p = ai.get(slot, "none")
+        if p in seen:
             continue
-        try:
-            text, finish = call_gemini_once(srt_path, src_lang, tgt_lang, model, cfg)
-            usage[model] = usage.get(model, 0) + 1
-            if model != order[0]:
-                log.info("Fallback model used: %s", model)
-            return text, model, finish
-        except GeminiError as e:
-            last_err = e
-            if e.http_code in ("500", "502", "503", "504", "429", "000"):
-                fails[model] = fails.get(model, 0) + 1
-                log.warning("Model %s unavailable (%s), trying next", model, e.http_code)
+        if p in MT_PROVIDERS:  # MT engines have no model list — configured by key/URL
+            if p == "cf_m2m100":  # reuses the cloudflare block's credentials
+                configured = cfg["cloudflare"].get("account_id") and cfg["cloudflare"].get("api_key")
+            elif p == "gtranslate_free":  # keyless — always available once selected
+                configured = True
+            else:
+                configured = cfg.get(p, {}).get("api_key") or cfg.get(p, {}).get("base_url")
+            if configured:
+                chain.append((p, [p], 10 ** 9, {}))  # char-limited, not request-limited
+                seen.add(p)
+        elif p in PROVIDERS and cfg.get(p, {}).get("models"):
+            chain.append((p, cfg[p]["models"], cfg["limits"].get("max_daily_per_model", 18),
+                          cfg[p].get("model_daily_limit", {})))
+            seen.add(p)
+    if not chain and cfg.get("gemini", {}).get("models"):
+        chain.append(("gemini", cfg["gemini"]["models"], cfg["limits"].get("max_daily_per_model", 18),
+                      cfg["gemini"].get("model_daily_limit", {})))
+    return chain
+
+
+def call_with_fallback(srt_path, src_lang, tgt_lang, cfg, usage, fails):
+    """Try providers in priority order, each model in turn; skip models at their
+    daily limit, fall back on 5xx/429/auth errors. Mutates usage and fails."""
+    chain = provider_chain(cfg)
+    first = chain[0][1][0] if chain and chain[0][1] else None
+    last_err = None
+    for provider, models, default_limit, per_model in chain:
+        for model in models:
+            limit = per_model.get(model, default_limit)
+            if usage.get(model, 0) >= limit:
+                log.info("Model %s at daily limit (%s) — skipping", model, limit)
                 continue
-            raise
-    raise AllModelsExhaustedError(f"All models unavailable/at limit. Last error: {last_err}")
+            try:
+                if provider in MT_PROVIDERS:
+                    text, finish = mt_translate_chunk(provider, srt_path, src_lang, tgt_lang, cfg)
+                else:
+                    text, finish = call_model_once(provider, model, srt_path, src_lang, tgt_lang, cfg)
+                usage[model] = usage.get(model, 0) + 1
+                if model != first:
+                    log.info("Fallback to %s/%s", provider, model)
+                return text, model, finish
+            except GeminiError as e:
+                last_err = e
+                if e.http_code in RETRIABLE:
+                    fails[model] = fails.get(model, 0) + 1
+                    log.warning("%s/%s unavailable (%s), trying next", provider, model, e.http_code)
+                    continue
+                raise
+    raise AllModelsExhaustedError(f"All providers/models unavailable. Last error: {last_err}")
 
 
 # ── Adaptive batch translation ────────────────────────────────────────────────
 
-def _batch_cap(model, cfg):
-    overrides = cfg["gemini"].get("model_batch", {})
+def _batch_cap(provider, model, cfg):
+    overrides = cfg.get(provider, {}).get("model_batch", {})
     return overrides.get(model) or cfg["translation"].get("batch_size", 150)
 
 
@@ -353,9 +845,13 @@ def _translate_all(srt_path, src_lang, tgt_lang, cfg, tmp, usage, fails):
     trl_map, model_calls = {}, {}
     used_model = None
     remaining = list(src_entries)
-    preferred = (cfg["gemini"].get("models") or DEFAULT_MODELS)[0]
-    batch_cap = _batch_cap(preferred, cfg)
-    log.info("Batch cap: %s (preferred model: %s)", batch_cap, preferred)
+    chain = provider_chain(cfg)
+    if chain and chain[0][1]:
+        batch_cap = _batch_cap(chain[0][0], chain[0][1][0], cfg)
+        preferred = chain[0][1][0]
+    else:
+        preferred, batch_cap = None, cfg["translation"].get("batch_size", 150)
+    log.info("Batch cap: %s (preferred: %s)", batch_cap, preferred)
     send_count = min(len(remaining), batch_cap)
     max_attempts = max(30, len(src_entries) // 50 * 2)
     attempt = 0
@@ -375,7 +871,7 @@ def _translate_all(srt_path, src_lang, tgt_lang, cfg, tmp, usage, fails):
             log.info("Retry %s: %s entries", attempt, len(batch))
 
         try:
-            translated_text, model, finish = call_gemini_with_fallback(chunk_path, src_lang, tgt_lang, cfg, usage, fails)
+            translated_text, model, finish = call_with_fallback(chunk_path, src_lang, tgt_lang, cfg, usage, fails)
         except (GeminiError, AllModelsExhaustedError) as e:
             log.warning("Attempt %s: all models failed (%s) — halving batch", attempt, e)
             send_count = max(50, len(batch) // 2)
@@ -564,33 +1060,24 @@ def _start_ms(tc):
 
 
 def _judge(prompt, cfg, usage):
-    """One Gemini call (temperature 0) trying models in order, honouring daily
-    limits. Returns (text, model_calls)."""
-    order = cfg["gemini"].get("models") or DEFAULT_MODELS
-    default_limit = cfg["limits"].get("max_daily_per_model", 18)
-    per_model = cfg["gemini"].get("model_daily_limit", {})
-    api_key = cfg["gemini"]["api_key"]
-    timeout = cfg["translation"].get("api_timeout", 1200)
+    """One small completion over the provider chain (honouring daily limits) for the
+    verification QA pass. Returns (text, model_calls)."""
     last = None
-    for model in order:
-        if usage.get(model, 0) >= per_model.get(model, default_limit):
+    for provider, models, default_limit, per_model in provider_chain(cfg):
+        if provider in MT_PROVIDERS:  # MT engines can't act as an LLM judge
             continue
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-        body = {"contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {"temperature": 0.0, "maxOutputTokens": 2048}}
-        try:
-            r = requests.post(url, json=body, timeout=timeout,
-                              headers={"x-goog-api-key": api_key, "Content-Type": "application/json"})
-        except requests.RequestException as e:
-            last = GeminiError("000", str(e)); continue
-        if r.status_code != 200:
-            last = GeminiError(str(r.status_code), r.text[:200])
-            if r.status_code in (429, 500, 502, 503, 504):
+        for model in models:
+            if usage.get(model, 0) >= per_model.get(model, default_limit):
                 continue
-            raise last
-        usage[model] = usage.get(model, 0) + 1
-        cand = (r.json().get("candidates") or [{}])[0]
-        return cand.get("content", {}).get("parts", [{}])[0].get("text", ""), {model: 1}
+            try:
+                text, _ = _complete(provider, model, prompt, cfg, max_tokens=2048)
+            except GeminiError as e:
+                last = e
+                if e.http_code in RETRIABLE:
+                    continue
+                raise
+            usage[model] = usage.get(model, 0) + 1
+            return text, {model: 1}
     raise AllModelsExhaustedError(f"verify: no model available ({last})")
 
 
