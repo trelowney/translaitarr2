@@ -41,7 +41,8 @@ def init_db():
             started_at  TEXT,
             finished_at TEXT,
             result      TEXT,
-            error       TEXT
+            error       TEXT,
+            verify_note TEXT
         );
         CREATE TABLE IF NOT EXISTS daily_count (
             day   TEXT PRIMARY KEY,
@@ -54,12 +55,17 @@ def init_db():
             fails INTEGER DEFAULT 0,
             PRIMARY KEY (day, model)
         );
+        CREATE TABLE IF NOT EXISTS our_sidecars (
+            path       TEXT PRIMARY KEY,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
         """
     )
     # Migrate DBs created before the 'force' column existed.
     for ddl in ("ALTER TABLE jobs ADD COLUMN force INTEGER DEFAULT 0",
                 "ALTER TABLE jobs ADD COLUMN action TEXT DEFAULT 'translate'",
                 "ALTER TABLE jobs ADD COLUMN provider TEXT DEFAULT ''",
+                "ALTER TABLE jobs ADD COLUMN verify_note TEXT",
                 "ALTER TABLE model_daily_calls ADD COLUMN fails INTEGER DEFAULT 0"):
         try:
             conn.execute(ddl)
@@ -126,14 +132,14 @@ def get_next_pending():
             row["provider"] or "") if row else None
 
 
-def set_status(job_id, status, result=None, error=None):
+def set_status(job_id, status, result=None, error=None, verify_note=None):
     conn = get_db()
     if status == "processing":
         conn.execute("UPDATE jobs SET status=?, started_at=datetime('now') WHERE id=?", (status, job_id))
     else:
         conn.execute(
-            "UPDATE jobs SET status=?, finished_at=datetime('now'), result=?, error=? WHERE id=?",
-            (status, result, error, job_id),
+            "UPDATE jobs SET status=?, finished_at=datetime('now'), result=?, error=?, verify_note=? WHERE id=?",
+            (status, result, error, verify_note, job_id),
         )
     conn.commit()
     conn.close()
@@ -182,6 +188,31 @@ def retry(job_id):
         "UPDATE jobs SET status='pending', error=NULL, started_at=NULL, finished_at=NULL WHERE id=?",
         (job_id,),
     )
+    conn.commit()
+    conn.close()
+
+
+# ── Sidecars we wrote ─────────────────────────────────────────────────────────
+# Tracked persistently (survives job pruning) so the superseded-sidecar cleanup
+# only ever removes subtitles translAItarr2 created — never user-provided ones.
+
+def record_sidecar(path):
+    conn = get_db()
+    conn.execute("INSERT OR IGNORE INTO our_sidecars (path) VALUES (?)", (path,))
+    conn.commit()
+    conn.close()
+
+
+def is_our_sidecar(path):
+    conn = get_db()
+    row = conn.execute("SELECT 1 FROM our_sidecars WHERE path=? LIMIT 1", (path,)).fetchone()
+    conn.close()
+    return row is not None
+
+
+def forget_sidecar(path):
+    conn = get_db()
+    conn.execute("DELETE FROM our_sidecars WHERE path=?", (path,))
     conn.commit()
     conn.close()
 

@@ -154,6 +154,10 @@ DEFAULTS = {
         # language and flag dubious jobs. Costs one extra request per job.
         "verify": False,
         "verify_samples": 8,
+        # When a release is upgraded and the new file already carries the target
+        # language (embedded audio or subtitle), delete the now-stale sidecar we
+        # translated earlier. Only ever removes subtitles translAItarr2 created.
+        "cleanup_superseded": True,
     },
     "validation": {
         "enabled": True,

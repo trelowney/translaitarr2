@@ -562,6 +562,7 @@ def _queue_data():
             "added": _fmt_ts(j.get("added_at")),
             "finished": _fmt_ts(j.get("finished_at")),
             "detail": j.get("error") or result,
+            "note": j.get("verify_note") or "",
         })
     usage = {
         "total": db.today_total(),
@@ -801,6 +802,7 @@ def settings_save():
         cfg["translation"]["source_preference"] = f["source_preference"]
     cfg["translation"]["verify"] = f.get("verify_enabled") == "on"
     cfg["translation"]["verify_samples"] = _int(f.get("verify_samples"), cfg["translation"]["verify_samples"])
+    cfg["translation"]["cleanup_superseded"] = f.get("cleanup_superseded") == "on"
 
     cfg["telemetry"]["enabled"] = f.get("telemetry_enabled") == "on"
 

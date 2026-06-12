@@ -2,8 +2,8 @@
 
 Pure helpers (no DB, no network) shared by the scanner (compute status) and,
 later, the translator (extract the chosen track). Mirrors the skip rules of the
-original translAItarr: a file is "done" if it already carries Czech as audio, an
-embedded subtitle, or a sidecar; otherwise we pick the best source subtitle by
+original translAItarr: a file is "done" if it already carries the target language as
+audio, an embedded subtitle, or a sidecar; otherwise we pick the best source subtitle by
 the configured language priority, preferring text over image (PGS/VOBSUB).
 """
 import json

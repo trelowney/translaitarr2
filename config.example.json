@@ -96,7 +96,8 @@
     "batch_size": 150,
     "source_preference": "video",
     "verify": false,
-    "verify_samples": 8
+    "verify_samples": 8,
+    "cleanup_superseded": true
   },
 
   "validation": {

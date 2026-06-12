@@ -33,7 +33,7 @@
         <td><span class="chip {{ j.chip }}">{{ j.status }}</span></td>
         <td class="hint">{{ j.added }}</td>
         <td class="hint">{{ j.finished }}</td>
-        <td class="hint">{{ j.detail }}</td>
+        <td class="hint">{{ j.detail }}{% if j.note %}<details class="verify-note"><summary>flagged cues</summary><pre>{{ j.note }}</pre></details>{% endif %}</td>
         <td class="actions">
           {% if j.status == 'error' %}<button class="small" data-act="retry" data-id="{{ j.id }}">Retry</button>{% endif %}
           <button class="small xbtn" data-act="delete" data-id="{{ j.id }}" title="Remove">&times;</button>
@@ -79,11 +79,12 @@
   }
   function rowHtml(j) {
     const retry = j.status === "error" ? '<button class="small" data-act="retry" data-id="' + j.id + '">Retry</button> ' : "";
+    const note = j.note ? '<details class="verify-note"><summary>flagged cues</summary><pre>' + esc(j.note) + '</pre></details>' : "";
     return '<tr><td>' + j.id + '</td><td>' + esc(j.title) + '</td>' +
       '<td><span class="chip ' + j.chip + '">' + esc(j.status) + '</span></td>' +
       '<td class="hint">' + esc(j.added) + '</td>' +
       '<td class="hint">' + esc(j.finished) + '</td>' +
-      '<td class="hint">' + esc(j.detail) + '</td>' +
+      '<td class="hint">' + esc(j.detail) + note + '</td>' +
       '<td class="actions">' + retry +
       '<button class="small xbtn" data-act="delete" data-id="' + j.id + '" title="Remove">×</button></td></tr>';
   }

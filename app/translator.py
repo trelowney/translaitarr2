@@ -1131,7 +1131,7 @@ def verify_translation(video_path, cfg, usage=None):
         if need > 0 and rest:
             sample += [rest[i * len(rest) // need] for i in range(need)]
 
-        model_calls, bad = {}, 0
+        model_calls, bad, flagged = {}, 0, []
         if sample:
             lines = "\n".join(f"{i}. SOURCE: {en}\n   TRANSLATION: {cs}"
                               for i, (en, cs) in enumerate(sample, 1))
@@ -1151,12 +1151,19 @@ def verify_translation(video_path, cfg, usage=None):
                         "note": f"verification call failed: {e}"}, model_calls
             m = re.search(r"\[[\d,\s]*\]", text)
             try:
-                bad = len(set(json.loads(m.group(0)))) if m else 0
+                bad_nums = set(json.loads(m.group(0))) if m else set()
             except ValueError:
-                bad = 0
+                bad_nums = set()
+            # Keep the actual flagged pairs so the UI can show *what* was dubious,
+            # not just a count.
+            flagged = [{"source": sample[i - 1][0], "translation": sample[i - 1][1]}
+                       for i in sorted(bad_nums) if 1 <= i <= len(sample)]
+            bad = len(flagged)
 
         ok = bad == 0
         log.info("Verify: %s aligned · %s identical-to-source · %s flagged of %s sampled -> %s",
                  len(aligned), len(identical), bad, len(sample), "OK" if ok else f"{bad} ISSUE(S)")
+        for f in flagged:
+            log.info("  flagged: %r -> %r", f["source"], f["translation"])
         return {"ok": ok, "checked": len(aligned), "identical": len(identical),
-                "bad": bad, "samples": len(sample)}, model_calls
+                "bad": bad, "samples": len(sample), "flagged": flagged}, model_calls

@@ -293,6 +293,7 @@
     <label>Verify samples <span class="hint">— cues checked per verification</span></label>
     <input type="number" name="verify_samples" value="{{ cfg.translation.verify_samples }}">
     <div class="check" style="margin-top:14px"><input type="checkbox" checked disabled><span>Add a credit line to every subtitle — &ldquo;Translated by translAItarr2&rdquo; and the model used <span class="hint">(always on)</span></span></div>
+    <div class="check" style="margin-top:14px"><input type="checkbox" name="cleanup_superseded" {{ 'checked' if cfg.translation.cleanup_superseded }}><span>Remove our translation when an upgrade already includes the target language <span class="hint">— if a re-downloaded release ships {{ cfg.languages.target.name or 'the target language' }} as audio or subtitles, delete the now-stale .srt translAItarr2 wrote earlier. Only ever removes subtitles we created — never your own files.</span></span></div>
     <p class="hint">Batch size is set per model in the AI providers section above. Manual verification is the &ldquo;Verify&rdquo; button on a translated title in the Library.</p>
   </div>
 

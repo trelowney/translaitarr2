@@ -60,6 +60,8 @@ translAItarr2 handles those cases:
 - **Optional translation verification** — samples a finished translation and has the
   model check each line's meaning against the source, so it tolerates paraphrase and
   flags only genuinely wrong / untranslated lines; run it automatically or on demand.
+  When something is flagged, the Queue shows the exact source → translation pairs so
+  you can judge for yourself.
 - **Quality options** — SDH/caption stripping, output sanity validation (drops junk
   cues), and a credit line on every file.
 - **Live queue** — jobs, today's per-model usage, **per-provider usage where available**
@@ -229,6 +231,14 @@ subtitle, or a sidecar `.srt`. Otherwise it selects the best available source
 subtitle (by your priority order), extracting or OCR-ing it if needed, and queues a
 translation. A re-translation is triggered automatically when a video file is
 replaced by a newer (upgraded) release.
+
+If that upgraded release **already includes your target language** (as audio or an
+embedded subtitle), there's nothing to re-translate — and the `.srt` translAItarr2
+wrote for the previous release is now redundant. With **Remove our translation when an
+upgrade already includes the target language** enabled (Settings → Translation, on by
+default), that stale sidecar is deleted automatically on the next scan. As a safety
+measure it only ever removes subtitle files translAItarr2 created itself — your own
+hand-placed `.srt` files are never touched.
 
 ## Requirements for OCR
 
