@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Settings · translAItarr2{% endblock %}
 {% block content %}
+{% macro secret(name, is_set) -%}
+<div class="secret"><input type="password" name="{{ name }}" data-secret autocomplete="new-password" placeholder="{{ '••••••••' if is_set else '' }}"><button type="button" class="small secret-save" disabled>Save</button><span class="secret-msg hint"></span></div>
+{%- endmacro %}
 <h1>Settings</h1>
-<p class="sub">Changes save automatically. Secrets are write-only and shown as ••••. <span id="save-status" class="autosave-status"></span></p>
+<p class="sub">Most settings save automatically. <b>API keys and the password have their own Save button.</b> Secrets are write-only and shown as ••••. <span id="save-status" class="autosave-status"></span></p>
 
 <form method="post" action="{{ url_for('settings_save') }}" data-autosave id="settings-form">
   <div class="card">
@@ -10,7 +13,7 @@
     <label>URL</label>
     <input type="text" name="sonarr_url" value="{{ cfg.arr.sonarr.url }}">
     <label>API key <span class="hint">(leave ••••/blank to keep current)</span></label>
-    <input type="password" name="sonarr_api_key" placeholder="{{ '••••••••' if cfg.arr.sonarr.api_key else '' }}">
+    {{ secret("sonarr_api_key", cfg.arr.sonarr.api_key) }}
   </div>
 
   <div class="card">
@@ -18,7 +21,7 @@
     <label>URL</label>
     <input type="text" name="radarr_url" value="{{ cfg.arr.radarr.url }}">
     <label>API key <span class="hint">(leave blank to keep current)</span></label>
-    <input type="password" name="radarr_api_key" placeholder="{{ '••••••••' if cfg.arr.radarr.api_key else '' }}">
+    {{ secret("radarr_api_key", cfg.arr.radarr.api_key) }}
   </div>
 
   {% from "partials/_model_widget.html" import model_widget %}
@@ -99,7 +102,7 @@
 
     <div class="provider-panel" data-provider-panel="gemini">
       <label>Gemini API key <span class="hint">(leave blank to keep current)</span></label>
-      <input type="password" name="gemini_api_key" placeholder="{{ '••••••••' if cfg.gemini.api_key else '' }}">
+      {{ secret("gemini_api_key", cfg.gemini.api_key) }}
       <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="gemini" data-test-url="/api/gemini/test">Test key</button><span class="test-msg hint"></span></div>
       {{ model_widget("gemini", cfg.gemini.models, cfg.gemini.model_batch, cfg.gemini.model_daily_limit,
                       cfg.translation.batch_size, cfg.limits.max_daily_per_model,
@@ -109,7 +112,7 @@
 
     <div class="provider-panel" data-provider-panel="openrouter" hidden>
       <label>OpenRouter API key <span class="hint">(leave blank to keep current)</span></label>
-      <input type="password" name="openrouter_api_key" placeholder="{{ '••••••••' if cfg.openrouter.api_key else '' }}">
+      {{ secret("openrouter_api_key", cfg.openrouter.api_key) }}
       <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="openrouter" data-test-url="/api/openrouter/test">Test key</button><span class="test-msg hint"></span></div>
       <p class="hint">Browse OpenRouter's catalogue and pick models — <b>Free</b> models cost nothing to run.
         The list loads from OpenRouter's public API (no credit used just to browse).</p>
@@ -146,7 +149,7 @@
       <input type="text" name="openai_base_url" value="{{ cfg.openai_compat.base_url }}"
              placeholder="http://ollama:11434/v1">
       <label>API key <span class="hint">(leave blank for local servers / to keep current)</span></label>
-      <input type="password" name="openai_compat_api_key" placeholder="{{ '••••••••' if cfg.openai_compat.api_key else '' }}">
+      {{ secret("openai_compat_api_key", cfg.openai_compat.api_key) }}
       <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="openai_compat" data-test-url="/api/openai/test" data-url-field="openai_base_url">Test connection</button><span class="test-msg hint"></span></div>
       {{ model_widget("openai_compat", cfg.openai_compat.models, cfg.openai_compat.model_batch, cfg.openai_compat.model_daily_limit,
                       cfg.translation.batch_size, cfg.limits.max_daily_per_model,
@@ -159,7 +162,7 @@
       <p class="hint">Native <b>Claude</b> models (Opus / Sonnet / Haiku). Anthropic's API is
         paid — there's no free tier. Browsing the model list is free; translating spends credit.</p>
       <label>Anthropic API key <span class="hint">(leave blank to keep current)</span></label>
-      <input type="password" name="anthropic_api_key" placeholder="{{ '••••••••' if cfg.anthropic.api_key else '' }}">
+      {{ secret("anthropic_api_key", cfg.anthropic.api_key) }}
       <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="anthropic" data-test-url="/api/anthropic/test">Test key</button><span class="test-msg hint"></span></div>
       {{ model_widget("anthropic", cfg.anthropic.models, cfg.anthropic.model_batch, cfg.anthropic.model_daily_limit,
                       cfg.translation.batch_size, cfg.limits.max_daily_per_model,
@@ -175,7 +178,7 @@
       <label>Account ID</label>
       <input type="text" name="cloudflare_account_id" value="{{ cfg.cloudflare.account_id }}" placeholder="your 32-character Cloudflare account ID">
       <label>API token <span class="hint">(leave blank to keep current)</span></label>
-      <input type="password" name="cloudflare_api_key" placeholder="{{ '••••••••' if cfg.cloudflare.api_key else '' }}">
+      {{ secret("cloudflare_api_key", cfg.cloudflare.api_key) }}
       <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="cloudflare" data-test-url="/api/cloudflare/test" data-url-field="cloudflare_account_id">Test connection</button><span class="test-msg hint"></span></div>
       {{ model_widget("cloudflare", cfg.cloudflare.models, cfg.cloudflare.model_batch, cfg.cloudflare.model_daily_limit,
                       cfg.translation.batch_size, cfg.limits.max_daily_per_model,
@@ -190,7 +193,7 @@
         than an LLM. Free tier = 500k characters/month; the free vs paid endpoint is detected
         automatically from your key (free keys end in <code>:fx</code>). No model to pick.</p>
       <label>DeepL API key <span class="hint">(leave blank to keep current)</span></label>
-      <input type="password" name="deepl_api_key" placeholder="{{ '••••••••' if cfg.deepl.api_key else '' }}">
+      {{ secret("deepl_api_key", cfg.deepl.api_key) }}
       <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="deepl" data-test-url="/api/deepl/test">Test key</button><span class="test-msg hint"></span></div>
       <p class="hint">Set DeepL as a provider in the priority slots above to use it.</p>
     </div>
@@ -203,7 +206,7 @@
       <label>Server URL</label>
       <input type="text" name="libretranslate_base_url" value="{{ cfg.libretranslate.base_url }}" placeholder="http://libretranslate:5000">
       <label>API key <span class="hint">(only if your instance requires one — leave blank to keep current)</span></label>
-      <input type="password" name="libretranslate_api_key" placeholder="{{ '••••••••' if cfg.libretranslate.api_key else '' }}">
+      {{ secret("libretranslate_api_key", cfg.libretranslate.api_key) }}
       <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="libretranslate" data-test-url="/api/libretranslate/test" data-url-field="libretranslate_base_url">Test connection</button><span class="test-msg hint"></span></div>
       <p class="hint">Set LibreTranslate as a provider in the priority slots above to use it.</p>
     </div>
@@ -212,7 +215,7 @@
       <p class="hint"><b>Google Cloud Translation</b> (official, paid). Create an API key in
         Google Cloud → APIs &amp; Services → Credentials, with the Translation API enabled.</p>
       <label>API key <span class="hint">(leave blank to keep current)</span></label>
-      <input type="password" name="google_api_key" placeholder="{{ '••••••••' if cfg.google.api_key else '' }}">
+      {{ secret("google_api_key", cfg.google.api_key) }}
       <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="google" data-test-url="/api/google/test">Test key</button><span class="test-msg hint"></span></div>
     </div>
 
@@ -220,7 +223,7 @@
       <p class="hint"><b>Microsoft / Azure Translator</b>. Key + the resource <b>region</b> from your
         Azure Translator resource (Keys and Endpoint page).</p>
       <label>API key <span class="hint">(leave blank to keep current)</span></label>
-      <input type="password" name="azure_api_key" placeholder="{{ '••••••••' if cfg.azure.api_key else '' }}">
+      {{ secret("azure_api_key", cfg.azure.api_key) }}
       <label>Region</label>
       <input type="text" name="azure_region" value="{{ cfg.azure.region }}" placeholder="e.g. westeurope">
       <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="azure" data-test-url="/api/azure/test">Test key</button><span class="test-msg hint"></span></div>
@@ -229,7 +232,7 @@
     <div class="provider-panel" data-provider-panel="yandex" hidden>
       <p class="hint"><b>Yandex Translate</b>. API key + the <b>folder id</b> of your Yandex Cloud folder.</p>
       <label>API key <span class="hint">(leave blank to keep current)</span></label>
-      <input type="password" name="yandex_api_key" placeholder="{{ '••••••••' if cfg.yandex.api_key else '' }}">
+      {{ secret("yandex_api_key", cfg.yandex.api_key) }}
       <label>Folder ID</label>
       <input type="text" name="yandex_folder_id" value="{{ cfg.yandex.folder_id }}" placeholder="b1g…">
       <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="yandex" data-test-url="/api/yandex/test">Test key</button><span class="test-msg hint"></span></div>
@@ -334,5 +337,21 @@
       generate an id.</p>
   </div>
 
+</form>
+
+<form method="post" action="{{ url_for('settings_auth') }}" class="card" style="margin-top:0">
+  <h2>Security</h2>
+  {% with msgs = get_flashed_messages(category_filter=["auth"]) %}
+    {% if msgs %}<p class="hint" style="color:var(--red)">{{ msgs[0] }}</p>{% endif %}
+  {% endwith %}
+  <div class="check"><input type="checkbox" name="auth_enabled" {{ 'checked' if cfg.auth.enabled }}><span>Require a password to access translAItarr2</span></div>
+  <label>{{ 'Change password' if cfg.auth.password_hash else 'Set password' }} <span class="hint">— leave blank to keep the current one</span></label>
+  <input type="password" name="auth_password" autocomplete="new-password" placeholder="{{ '••••••••' if cfg.auth.password_hash else 'choose a password' }}">
+  <label>Confirm password</label>
+  <input type="password" name="auth_password_confirm" autocomplete="new-password" placeholder="repeat the password">
+  <label style="margin-top:14px">Stay signed in for <span class="hint">— how long a login lasts before the password is asked again</span></label>
+  <input type="number" name="session_days" min="1" value="{{ cfg.auth.session_days }}"> <span class="hint">days</span>
+  <p class="hint">The login cookie is persistent, so closing the browser (or backgrounding it on mobile) no longer logs you out before this expires. A new sign-in picks up any change here.</p>
+  <div class="model-add" style="margin-top:12px"><button type="submit" class="small">Save security settings</button></div>
 </form>
 {% endblock %}

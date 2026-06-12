@@ -204,6 +204,33 @@ document.querySelectorAll("[data-test-provider]").forEach((btn) => {
   });
 });
 
+// ── Per-field API key save ───────────────────────────────────────────────────
+// API keys aren't autosaved; each saves on its own button so a half-typed key
+// is never written. The value stays in the field afterwards so Test / model
+// browse keep working without a reload.
+document.querySelectorAll("[data-secret]").forEach((inp) => {
+  const wrap = inp.closest(".secret");
+  if (!wrap) return;
+  const btn = wrap.querySelector(".secret-save");
+  const msg = wrap.querySelector(".secret-msg");
+  inp.addEventListener("input", () => { btn.disabled = inp.value.trim() === ""; msg.textContent = ""; });
+  btn.addEventListener("click", async () => {
+    const value = inp.value.trim();
+    if (!value) return;
+    btn.disabled = true; msg.textContent = "Saving…"; msg.style.color = "";
+    try {
+      const r = await fetch("/api/secret", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ field: inp.name, value }),
+      });
+      const d = await r.json();
+      msg.textContent = (d.ok ? "✓ " : "✗ ") + d.message;
+      msg.style.color = d.ok ? "var(--green)" : "var(--red)";
+      if (d.ok) { inp.placeholder = "••••••••"; } else { btn.disabled = false; }
+    } catch (e) { msg.textContent = "✗ " + e; msg.style.color = "var(--red)"; btn.disabled = false; }
+  });
+});
+
 // ── Path mapping table ───────────────────────────────────────────────────────
 (function () {
   const table = document.getElementById("remap-table");
@@ -281,6 +308,10 @@ document.querySelectorAll("[data-test-provider]").forEach((btn) => {
     } catch (e) { show("✗ Not saved: " + e, "var(--red)"); toast("✗ Not saved", false); }
   }
   function schedule() { clearTimeout(timer); timer = setTimeout(save, 600); }
-  form.addEventListener("input", schedule);
-  form.addEventListener("change", schedule);
+  // Secrets (type=password) never ride the autosave — each API key has its own
+  // Save button (see the secret-save block below), so a half-typed key is never
+  // persisted. Skip them on both input and change.
+  const isSecret = (el) => el && el.type === "password";
+  form.addEventListener("input", (e) => { if (!isSecret(e.target)) schedule(); });
+  form.addEventListener("change", (e) => { if (!isSecret(e.target)) schedule(); });
 })();

@@ -16,7 +16,7 @@ import sys
 import time
 from logging.handlers import RotatingFileHandler
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import requests
 
@@ -67,6 +67,18 @@ try:
         os.chmod(_secret_path, 0o600)
 except OSError:
     app.secret_key = secrets.token_hex(32)
+
+
+def _apply_session_lifetime(cfg):
+    """Make the login cookie a persistent (not browser-session) cookie so it
+    survives the browser being closed / mobile tabs being evicted. Read from
+    config each login so a Settings change takes effect without a restart."""
+    days = cfg.get("auth", {}).get("session_days", 30)
+    try:
+        days = max(1, int(days))
+    except (TypeError, ValueError):
+        days = 30
+    app.permanent_session_lifetime = timedelta(days=days)
 
 # Endpoints reachable without an active config / login.
 # Changes each process start, so a rebuilt image busts the browser's cache of
@@ -146,6 +158,8 @@ def login():
         return redirect(url_for("library"))
     if request.method == "POST":
         if cfgmod.verify_password(cfg, request.form.get("password", "")):
+            _apply_session_lifetime(cfg)
+            session.permanent = True
             session["authed"] = True
             return redirect(url_for("library"))
         flash("Incorrect password.")
@@ -182,6 +196,8 @@ def setup_submit():
     if f.get("auth_enabled") == "on" and f.get("password"):
         cfg["auth"]["enabled"] = True
         cfg["auth"]["password_hash"] = cfgmod.hash_password(f["password"])
+        _apply_session_lifetime(cfg)
+        session.permanent = True
         session["authed"] = True
     else:
         cfg["auth"]["enabled"] = False
@@ -724,39 +740,17 @@ def settings_save():
 
     cfg["arr"]["sonarr"]["url"] = f.get("sonarr_url", cfg["arr"]["sonarr"]["url"]).strip()
     cfg["arr"]["radarr"]["url"] = f.get("radarr_url", cfg["arr"]["radarr"]["url"]).strip()
-    # Blank secret field => keep the existing key.
-    if f.get("sonarr_api_key", "").strip():
-        cfg["arr"]["sonarr"]["api_key"] = f["sonarr_api_key"].strip()
-    if f.get("radarr_api_key", "").strip():
-        cfg["arr"]["radarr"]["api_key"] = f["radarr_api_key"].strip()
-    if f.get("gemini_api_key", "").strip():
-        cfg["gemini"]["api_key"] = f["gemini_api_key"].strip()
-    if f.get("openrouter_api_key", "").strip():
-        cfg["openrouter"]["api_key"] = f["openrouter_api_key"].strip()
-    if f.get("openai_compat_api_key", "").strip():
-        cfg["openai_compat"]["api_key"] = f["openai_compat_api_key"].strip()
+    # API keys are NOT saved here — each has its own Save button (-> /api/secret),
+    # so autosave never persists half-typed keys. Only the non-secret companion
+    # fields (base URLs / region / ids) ride along with the autosave.
     if "openai_base_url" in f:
         cfg["openai_compat"]["base_url"] = f.get("openai_base_url", "").strip()
-    if f.get("anthropic_api_key", "").strip():
-        cfg["anthropic"]["api_key"] = f["anthropic_api_key"].strip()
-    if f.get("cloudflare_api_key", "").strip():
-        cfg["cloudflare"]["api_key"] = f["cloudflare_api_key"].strip()
     if "cloudflare_account_id" in f:
         cfg["cloudflare"]["account_id"] = f.get("cloudflare_account_id", "").strip()
-    if f.get("deepl_api_key", "").strip():
-        cfg["deepl"]["api_key"] = f["deepl_api_key"].strip()
     if "libretranslate_base_url" in f:
         cfg["libretranslate"]["base_url"] = f.get("libretranslate_base_url", "").strip()
-    if f.get("libretranslate_api_key", "").strip():
-        cfg["libretranslate"]["api_key"] = f["libretranslate_api_key"].strip()
-    if f.get("google_api_key", "").strip():
-        cfg["google"]["api_key"] = f["google_api_key"].strip()
-    if f.get("azure_api_key", "").strip():
-        cfg["azure"]["api_key"] = f["azure_api_key"].strip()
     if "azure_region" in f:
         cfg["azure"]["region"] = f.get("azure_region", "").strip()
-    if f.get("yandex_api_key", "").strip():
-        cfg["yandex"]["api_key"] = f["yandex_api_key"].strip()
     if "yandex_folder_id" in f:
         cfg["yandex"]["folder_id"] = f.get("yandex_folder_id", "").strip()
 
@@ -812,6 +806,66 @@ def settings_save():
         return ("", 204)
     flash("Settings saved.")
     return redirect(url_for("settings"))
+
+
+@app.route("/settings/auth", methods=["POST"], endpoint="settings_auth")
+def settings_auth():
+    """Explicit (non-autosave) save for the Security card: enable/disable the
+    password gate, set/change the password, and the session lifetime."""
+    cfg = cfgmod.load_config()
+    f = request.form
+    new_pw = f.get("auth_password", "")
+    if new_pw:
+        if new_pw != f.get("auth_password_confirm", ""):
+            flash("Passwords don't match — nothing changed.", "auth")
+            return redirect(url_for("settings"))
+        cfg["auth"]["password_hash"] = cfgmod.hash_password(new_pw)
+    # Only enforce auth if a password actually exists, so ticking the box without
+    # ever setting one can't lock everyone out.
+    want = f.get("auth_enabled") == "on"
+    if want and not cfg["auth"]["password_hash"]:
+        flash("Set a password first to require sign-in.", "auth")
+        return redirect(url_for("settings"))
+    cfg["auth"]["enabled"] = bool(want and cfg["auth"]["password_hash"])
+    cfg["auth"]["session_days"] = max(1, _int(f.get("session_days"), cfg["auth"].get("session_days", 30)))
+    cfgmod.save_config(cfg)
+    flash("Security settings saved.")
+    return redirect(url_for("settings"))
+
+
+# Form field name -> config location for the per-field API-key Save buttons.
+SECRET_FIELDS = {
+    "sonarr_api_key": ("arr", "sonarr", "api_key"),
+    "radarr_api_key": ("arr", "radarr", "api_key"),
+    "gemini_api_key": ("gemini", "api_key"),
+    "openrouter_api_key": ("openrouter", "api_key"),
+    "openai_compat_api_key": ("openai_compat", "api_key"),
+    "anthropic_api_key": ("anthropic", "api_key"),
+    "cloudflare_api_key": ("cloudflare", "api_key"),
+    "deepl_api_key": ("deepl", "api_key"),
+    "libretranslate_api_key": ("libretranslate", "api_key"),
+    "google_api_key": ("google", "api_key"),
+    "azure_api_key": ("azure", "api_key"),
+    "yandex_api_key": ("yandex", "api_key"),
+}
+
+
+@app.route("/api/secret", methods=["POST"], endpoint="save_secret")
+def save_secret():
+    """Save a single API key on its own, so secrets never ride the autosave."""
+    path = SECRET_FIELDS.get((request.json or {}).get("field", ""))
+    if not path:
+        return jsonify({"ok": False, "message": "Unknown field"}), 400
+    value = ((request.json or {}).get("value") or "").strip()
+    if not value:
+        return jsonify({"ok": False, "message": "Empty — nothing to save"}), 400
+    cfg = cfgmod.load_config()
+    node = cfg
+    for k in path[:-1]:
+        node = node[k]
+    node[path[-1]] = value
+    cfgmod.save_config(cfg)
+    return jsonify({"ok": True, "message": "Saved"})
 
 
 # ── Status (redacted — safe to expose) ────────────────────────────────────────

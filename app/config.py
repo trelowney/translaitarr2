@@ -34,7 +34,7 @@ SECRET_PATHS = (
 
 DEFAULTS = {
     "onboarding_completed": False,
-    "auth": {"enabled": False, "password_hash": ""},
+    "auth": {"enabled": False, "password_hash": "", "session_days": 30},
     "arr": {
         "sonarr": {"url": "http://sonarr:8989", "api_key": ""},
         "radarr": {"url": "http://radarr:7878", "api_key": ""},
