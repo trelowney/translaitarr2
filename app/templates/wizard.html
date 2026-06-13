@@ -29,15 +29,121 @@
 
     {% from "partials/_model_widget.html" import model_widget %}
     <div class="card">
-      <div class="step-title">2 · Gemini</div>
-      <p class="hint">Gemini is the default translation engine. You can add other providers (e.g. OpenRouter) later in Settings.</p>
-      <label>API key</label>
-      <input type="password" name="gemini_api_key" placeholder="AIza…">
-      <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="gemini" data-test-url="/api/gemini/test">Test key</button><span class="test-msg hint"></span></div>
-      {{ model_widget("gemini", cfg.gemini.models, cfg.gemini.model_batch, cfg.gemini.model_daily_limit,
-                      cfg.translation.batch_size, cfg.limits.max_daily_per_model,
-                      "models", "model_batch", "model_daily_limit",
-                      "/api/gemini/models", "gemini_api_key") }}
+      <div class="step-title">2 · Translation engine</div>
+      <p class="hint">Pick the AI that does the translating. <b>Google Gemini</b> has a generous free
+        tier and is the easiest start — but you're not tied to it. You can add more engines or
+        fine-tune models later in Settings.</p>
+      <label>Engine</label>
+      <select name="primary_provider" id="wiz-engine">
+        <option value="gemini" selected>Google Gemini — free tier, recommended</option>
+        <option value="openrouter">OpenRouter — many models, one key</option>
+        <option value="openai_compat">OpenAI-compatible / local (Ollama, LM Studio, Groq…)</option>
+        <option value="anthropic">Anthropic — Claude (paid)</option>
+        <option value="cloudflare">Cloudflare Workers AI — free tier</option>
+        <option value="deepl">DeepL — dedicated translator</option>
+        <option value="libretranslate">LibreTranslate — self-hosted / free</option>
+        <option value="google">Google Cloud Translation (paid)</option>
+        <option value="azure">Microsoft / Azure Translator</option>
+        <option value="yandex">Yandex Translate</option>
+        <option value="cf_m2m100">Cloudflare m2m100 — free translator</option>
+        <option value="gtranslate_free">Google Translate (free, no key — low quality)</option>
+      </select>
+
+      {# One panel per engine. Only the selected one is shown (JS at the bottom). #}
+      <div class="engine-panel" data-engine="gemini">
+        <label>Gemini API key</label>
+        <input type="password" name="gemini_api_key" placeholder="AIza…">
+        <p class="hint">Free key at <b>aistudio.google.com → API keys</b>. Sensible models are preset.</p>
+        <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="gemini" data-test-url="/api/gemini/test">Test key</button><span class="test-msg hint"></span></div>
+        <details class="examples"><summary>Advanced: models &amp; limits</summary>
+          {{ model_widget("gemini", cfg.gemini.models, cfg.gemini.model_batch, cfg.gemini.model_daily_limit,
+                          cfg.translation.batch_size, cfg.limits.max_daily_per_model,
+                          "models", "model_batch", "model_daily_limit",
+                          "/api/gemini/models", "gemini_api_key") }}
+        </details>
+      </div>
+
+      <div class="engine-panel" data-engine="openrouter" hidden>
+        <label>OpenRouter API key</label>
+        <input type="password" name="openrouter_api_key" placeholder="sk-or-…">
+        <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="openrouter" data-test-url="/api/openrouter/test">Test key</button><span class="test-msg hint"></span></div>
+        <p class="hint">After <em>Finish</em>, choose models in <b>Settings → AI providers</b>.</p>
+      </div>
+
+      <div class="engine-panel" data-engine="openai_compat" hidden>
+        <p class="hint">Anything that speaks the OpenAI API — local (Ollama, LM Studio, vLLM; usually no
+          key) or hosted (Groq, DeepSeek, OpenAI, Mistral…). Point the base URL at the server's <code>/v1</code>.</p>
+        <label>Base URL</label>
+        <input type="text" name="openai_base_url" placeholder="http://ollama:11434/v1">
+        <label>API key <span class="hint">(blank for local servers)</span></label>
+        <input type="password" name="openai_compat_api_key" placeholder="leave blank if local">
+        <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="openai_compat" data-test-url="/api/openai/test" data-url-field="openai_base_url">Test connection</button><span class="test-msg hint"></span></div>
+        <p class="hint">After <em>Finish</em>, add the model ids in <b>Settings → AI providers</b>.</p>
+      </div>
+
+      <div class="engine-panel" data-engine="anthropic" hidden>
+        <label>Anthropic API key</label>
+        <input type="password" name="anthropic_api_key" placeholder="sk-ant-…">
+        <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="anthropic" data-test-url="/api/anthropic/test">Test key</button><span class="test-msg hint"></span></div>
+        <p class="hint">Paid (no free tier). After <em>Finish</em>, choose Claude models in <b>Settings</b>.</p>
+      </div>
+
+      <div class="engine-panel" data-engine="cloudflare cf_m2m100" hidden>
+        <p class="hint">Cloudflare <b>Workers AI</b> — free tier ≈ 10k neurons/day. Account ID + a
+          Workers-AI API token from the Cloudflare dashboard. <i>(The m2m100 translator uses the same
+          credentials.)</i></p>
+        <label>Account ID</label>
+        <input type="text" name="cloudflare_account_id" placeholder="your 32-character account ID">
+        <label>API token</label>
+        <input type="password" name="cloudflare_api_key" placeholder="Workers AI API token">
+        <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="cloudflare" data-test-url="/api/cloudflare/test" data-url-field="cloudflare_account_id">Test connection</button><span class="test-msg hint"></span></div>
+        <p class="hint">After <em>Finish</em>, pick models in <b>Settings → AI providers</b>.</p>
+      </div>
+
+      <div class="engine-panel" data-engine="deepl" hidden>
+        <label>DeepL API key</label>
+        <input type="password" name="deepl_api_key" placeholder="…:fx for free keys">
+        <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="deepl" data-test-url="/api/deepl/test">Test key</button><span class="test-msg hint"></span></div>
+        <p class="hint">Free tier = 500k chars/month. No model to pick — works right after setup.</p>
+      </div>
+
+      <div class="engine-panel" data-engine="libretranslate" hidden>
+        <p class="hint"><b>LibreTranslate</b> — open-source MT you can self-host (free, fully local) or point at a public instance.</p>
+        <label>Server URL</label>
+        <input type="text" name="libretranslate_base_url" placeholder="http://libretranslate:5000">
+        <label>API key <span class="hint">(only if your instance needs one)</span></label>
+        <input type="password" name="libretranslate_api_key" placeholder="leave blank if not required">
+        <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="libretranslate" data-test-url="/api/libretranslate/test" data-url-field="libretranslate_base_url">Test connection</button><span class="test-msg hint"></span></div>
+      </div>
+
+      <div class="engine-panel" data-engine="google" hidden>
+        <label>Google Cloud Translation API key</label>
+        <input type="password" name="google_api_key" placeholder="AIza…">
+        <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="google" data-test-url="/api/google/test">Test key</button><span class="test-msg hint"></span></div>
+        <p class="hint">Official paid API (Translation API enabled in Google Cloud). Works right after setup.</p>
+      </div>
+
+      <div class="engine-panel" data-engine="azure" hidden>
+        <label>Azure Translator key</label>
+        <input type="password" name="azure_api_key" placeholder="from Keys and Endpoint">
+        <label>Region</label>
+        <input type="text" name="azure_region" placeholder="e.g. westeurope">
+        <p class="hint">Works right after setup. You can verify it later in <b>Settings</b>.</p>
+      </div>
+
+      <div class="engine-panel" data-engine="yandex" hidden>
+        <label>Yandex API key</label>
+        <input type="password" name="yandex_api_key" placeholder="Yandex Cloud API key">
+        <label>Folder ID</label>
+        <input type="text" name="yandex_folder_id" placeholder="b1g…">
+        <p class="hint">Works right after setup. You can verify it later in <b>Settings</b>.</p>
+      </div>
+
+      <div class="engine-panel" data-engine="gtranslate_free" hidden>
+        <p class="hint"><b>No key needed</b> — uses the unofficial keyless Google Translate endpoint.
+          Zero setup, but quality is poor and it may rate-limit. A last-resort / try-it-out option.</p>
+        <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="gtranslate_free" data-test-url="/api/gtfree/test">Test</button><span class="test-msg hint"></span></div>
+      </div>
     </div>
 
     <div class="card">
@@ -62,6 +168,19 @@
 </div>
 
 <script>
+// Step 2: show only the selected engine's fields.
+(function () {
+  const sel = document.getElementById('wiz-engine');
+  if (!sel) return;
+  const panels = document.querySelectorAll('.engine-panel');
+  function sync() {
+    const v = sel.value;
+    panels.forEach((p) => { p.hidden = !p.dataset.engine.split(' ').includes(v); });
+  }
+  sel.addEventListener('change', sync);
+  sync();
+})();
+
 async function testArr(svc) {
   const url = document.querySelector('[name=' + svc + '_url]').value;
   const key = document.querySelector('[name=' + svc + '_api_key]').value;

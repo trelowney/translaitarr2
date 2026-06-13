@@ -95,19 +95,43 @@ Where things stand:
 
 ## Quick start
 
+You don't need to clone this repo — the image is published to GitHub Container Registry.
+
+**1.** Make a folder and create a `docker-compose.yaml` in it:
+
+```yaml
+services:
+  translaitarr2:
+    image: ghcr.io/trelowney/translaitarr2:latest
+    container_name: translaitarr2
+    environment:
+      - PUID=1000           # your user id   (run `id` on the host to find yours)
+      - PGID=1000           # your group id
+      - TZ=Europe/Prague    # your timezone
+    volumes:
+      - ./config:/config            # settings, queue + your API keys — keep this private
+      - /path/to/media:/data        # your media library (the files Sonarr/Radarr manage)
+    ports:
+      - 9878:9878
+    restart: unless-stopped
+```
+
+**2.** Change the **media path** (`/path/to/media`) and the **PUID/PGID/TZ**, then start it:
+
 ```bash
-git clone https://github.com/trelowney/translaitarr2.git
-cd translaitarr2
-cp docker-compose.example.yaml docker-compose.yaml
-# edit volumes (your media path) and PUID/PGID, then:
 docker compose up -d
 ```
 
-Open `http://<host>:9878` and follow the setup wizard.
+**3.** Open **`http://<your-server-ip>:9878`** and follow the setup wizard. It walks you
+through Sonarr/Radarr, your translation engine, and languages — **no config files to
+hand-edit, and everything can be changed later in Settings.**
 
-> **Note:** translAItarr2 must be able to reach your Sonarr/Radarr API and read your
-> media files. If you run it inside your existing *arr Docker network you can use
-> service names like `http://sonarr:8989`; otherwise use the host's IP and port.
+> **You enter your Sonarr/Radarr URLs + API keys and your AI provider in the wizard** — not
+> in the compose file. translAItarr2 just needs to *reach* those APIs and *read* your media.
+>
+> **Already run an \*arr stack?** Drop this service into that stack's compose so it shares the
+> Docker network, then use service names like `http://sonarr:8989` in the wizard. See
+> [`docker-compose.example.yaml`](docker-compose.example.yaml) for that variant.
 
 ## Updating
 

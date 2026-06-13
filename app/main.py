@@ -189,7 +189,12 @@ def setup_submit():
     cfg["arr"]["sonarr"]["api_key"] = f.get("sonarr_api_key", "").strip()
     cfg["arr"]["radarr"]["url"] = f.get("radarr_url", "").strip()
     cfg["arr"]["radarr"]["api_key"] = f.get("radarr_api_key", "").strip()
-    cfg["gemini"]["api_key"] = f.get("gemini_api_key", "").strip()
+
+    # Translation engine (step 2): the chosen primary provider + its credentials.
+    primary = (f.get("primary_provider") or "").strip()
+    if primary in translator.PROVIDERS:
+        cfg["ai"]["primary"] = primary
+    _apply_provider_creds(cfg, f)
 
     _apply_lang_model_fields(cfg, f)
 
@@ -716,6 +721,37 @@ def _apply_provider_models(cfg, f, provider, name_models, name_batch, name_limit
         m: _int(raw_limit[m], cfg["limits"]["max_daily_per_model"])
         for m in models if m in raw_limit
     }
+
+
+# Non-secret companion fields for providers that need more than an API key.
+_PROVIDER_EXTRA_FIELDS = {
+    "openai_base_url": ("openai_compat", "base_url"),
+    "cloudflare_account_id": ("cloudflare", "account_id"),
+    "libretranslate_base_url": ("libretranslate", "base_url"),
+    "azure_region": ("azure", "region"),
+    "yandex_folder_id": ("yandex", "folder_id"),
+}
+
+
+def _set_nested(cfg, path, value):
+    node = cfg
+    for k in path[:-1]:
+        node = node[k]
+    node[path[-1]] = value
+
+
+def _apply_provider_creds(cfg, f):
+    """Save any provider credentials present in the form, blank-guarded so an empty
+    (hidden) wizard panel never wipes a value. Covers every provider key plus the
+    non-secret companion fields (base URLs, account id, region, folder id)."""
+    for field, path in SECRET_FIELDS.items():
+        v = (f.get(field) or "").strip()
+        if v:
+            _set_nested(cfg, path, v)
+    for field, path in _PROVIDER_EXTRA_FIELDS.items():
+        v = (f.get(field) or "").strip()
+        if v:
+            _set_nested(cfg, path, v)
 
 
 def _apply_lang_model_fields(cfg, f):
