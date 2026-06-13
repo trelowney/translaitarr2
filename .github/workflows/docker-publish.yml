@@ -14,6 +14,10 @@ on:
 
 env:
   IMAGE_NAME: ${{ github.repository }}   # e.g. yourname/translaitarr2
+  # Don't upload the per-build ".dockerbuild" record as an Actions artifact — they
+  # pile up (two per run) and serve no purpose here. Keeps Actions storage clean.
+  DOCKER_BUILD_RECORD_UPLOAD: false
+  DOCKER_BUILD_SUMMARY: false
 
 # Only one build per ref at a time — a newer push cancels the older in-flight
 # build (saves CI minutes and avoids concurrent cache-key races).
