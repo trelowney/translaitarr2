@@ -10,8 +10,8 @@ tools, it doesn't need a ready-made `.srt` lying around — it can **extract emb
 subtitles from the video** and even **OCR Blu-ray (PGS) bitmap subtitles** into text
 before translating.
 
-> Status: **early development.** This README is written alongside the code and will
-> grow as features land. Expect rough edges.
+> Status: **actively developed** — usable day to day. Still pre-1.0, so the odd rough
+> edge is possible, and this README grows as features land.
 
 ---
 
@@ -74,7 +74,7 @@ translAItarr2 handles those cases:
 
 ## Roadmap
 
-translAItarr2 is in **early development**. Rough plan:
+Where things stand:
 
 **Working now**
 - Sonarr/Radarr library view with real titles, grouped into Movies / TV Shows
