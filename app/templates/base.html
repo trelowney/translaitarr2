@@ -4,6 +4,95 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}translAItarr2{% endblock %}</title>
+  <!-- Boot resilience: a brief splash on the first page load of a session, plus an
+       inline watchdog that reloads (capped backoff) if the stylesheet or main script
+       fails to load during a backend hiccup (e.g. a redeploy). Self-contained so it
+       still works if app.css never arrives. Touches no in-page dynamic behaviour. -->
+  <script>
+    (function () {
+      var RKEY = 't2_boot_retry', SKEY = 't2_boot_seen';
+      var n = 0; try { n = parseInt(sessionStorage.getItem(RKEY) || '0', 10) || 0; } catch (e) {}
+      // Show the splash pre-paint only on the first load of a session, or while we are
+      // in a retry cycle — never flash it on ordinary tab switches (keeps the app feeling instant).
+      try {
+        if (n > 0 || !sessionStorage.getItem(SKEY)) {
+          document.documentElement.className += ' booting';
+          sessionStorage.setItem(SKEY, '1');
+        }
+      } catch (e) {}
+
+      var scheduled = false, finished = false;
+      function stuck() { var s = document.querySelector('#app-boot .ab-stuck'); if (s) s.style.display = 'block'; }
+      function retry() {
+        if (scheduled || finished) return;
+        scheduled = true;
+        try { sessionStorage.setItem(RKEY, String(n + 1)); } catch (e) {}
+        setTimeout(function () { location.reload(); }, Math.min(1500 + n * 1000, 6000)); // 1.5s,2.5s,…,max 6s
+      }
+      function trip() { if (n >= 3) stuck(); else retry(); }   // give up after 3, offer manual retry
+
+      // Capture phase: resource-load errors don't bubble. Only the stylesheet and a
+      // real <script src> count — ignore favicon/<img> failures so they can't loop.
+      window.addEventListener('error', function (e) {
+        var t = e.target;
+        if (t && ((t.tagName === 'LINK' && t.rel === 'stylesheet') || (t.tagName === 'SCRIPT' && t.src))) trip();
+      }, true);
+
+      // Page came up fine → fade the splash out and clear the retry counter.
+      window.addEventListener('load', function () {
+        finished = true;
+        try { sessionStorage.removeItem(RKEY); } catch (e) {}
+        var b = document.getElementById('app-boot');
+        if (b) b.classList.add('ab-hide');
+        setTimeout(function () { document.documentElement.classList.remove('booting'); if (b) b.classList.remove('ab-hide'); }, 300);
+      });
+
+      // Never finished loading within 10s → treat as a hung load and retry.
+      setTimeout(function () { if (!finished) trip(); }, 10000);
+    })();
+  </script>
+  <style>
+    /* Splash motif: a subtitle cue that translates itself — exactly what the app does.
+       Palette and type come from the app's own tokens so it reads as native, not bolted on. */
+    #app-boot { display: none; transition: opacity .3s ease; }
+    html.booting #app-boot {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px;
+      background: #15171c; color: #9aa1ad;
+      font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    #app-boot.ab-hide { opacity: 0; pointer-events: none; }
+    #app-boot .ab-brand { font-weight: 700; font-size: 22px; color: #e6e8ec; letter-spacing: .2px; }
+    #app-boot .ab-brand b { color: #4f9dff; font-weight: 700; }
+
+    #app-boot .ab-cap { position: relative; min-width: 240px; padding: 11px 24px 15px; background: rgba(0,0,0,.42); border-radius: 11px; }
+    #app-boot .ab-words { position: relative; height: 1.5em; }
+    #app-boot .ab-words span {
+      position: absolute; left: 50%; top: 0; transform: translateX(-50%); white-space: nowrap;
+      color: #e6e8ec; font-size: 16px; font-weight: 600; opacity: 0; animation: ab-cap 7.2s infinite;
+    }
+    #app-boot .ab-words span:nth-child(2) { animation-delay: 1.8s; }
+    #app-boot .ab-words span:nth-child(3) { animation-delay: 3.6s; }
+    #app-boot .ab-words span:nth-child(4) { animation-delay: 5.4s; }
+    @keyframes ab-cap {
+      0%   { opacity: 0; transform: translateX(-50%) translateY(3px); }
+      3%   { opacity: 1; transform: translateX(-50%) translateY(0); }
+      22%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+      25%  { opacity: 0; transform: translateX(-50%) translateY(-3px); }
+      100% { opacity: 0; }
+    }
+    /* The cue's timing bar fills once per caption, like a subtitle's on-screen duration. */
+    #app-boot .ab-cue { position: absolute; left: 16px; right: 16px; bottom: 8px; height: 2px; border-radius: 2px; background: #4f9dff; transform-origin: left center; transform: scaleX(0); animation: ab-cue 1.8s linear infinite; }
+    @keyframes ab-cue { 0% { transform: scaleX(0); opacity: 1; } 92% { transform: scaleX(1); opacity: 1; } 100% { transform: scaleX(1); opacity: 0; } }
+
+    #app-boot .ab-stuck { display: none; text-align: center; font-size: 13px; max-width: 280px; line-height: 1.6; }
+    #app-boot .ab-stuck button { margin-top: 10px; font: inherit; font-weight: 600; cursor: pointer; background: #4f9dff; color: #0c1320; border: none; border-radius: 8px; padding: 8px 18px; }
+    @media (prefers-reduced-motion: reduce) {
+      #app-boot .ab-words span { animation: none; }
+      #app-boot .ab-words span:first-child { opacity: 1; }
+      #app-boot .ab-cue { animation: none; transform: scaleX(.4); }
+    }
+  </style>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}?v={{ asset_ver }}">
   <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}?v={{ asset_ver }}">
   <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}?v={{ asset_ver }}" sizes="any">
@@ -11,6 +100,23 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ asset_ver }}">
 </head>
 <body>
+  <!-- Boot splash (shown by the watchdog in <head> only on a session's first load). -->
+  <div id="app-boot" aria-hidden="true">
+    <div class="ab-brand">transl<b>AI</b>tarr2</div>
+    <div class="ab-cap" role="status" aria-label="Loading">
+      <div class="ab-words">
+        <span>Loading…</span>
+        <span>Načítám…</span>
+        <span>Cargando…</span>
+        <span>読み込み中…</span>
+      </div>
+      <div class="ab-cue"></div>
+    </div>
+    <div class="ab-stuck">Couldn't reach the server — retrying…<br>
+      <button type="button" onclick="try{sessionStorage.removeItem('t2_boot_retry')}catch(e){}; location.reload()">Try again</button>
+    </div>
+  </div>
+
   {% if show_nav|default(true) %}
   <header class="topbar">
     <a class="brand" href="{{ url_for('library') }}">transl<span class="accent">AI</span>tarr2</a>
