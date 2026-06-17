@@ -66,6 +66,7 @@ def init_db():
                 "ALTER TABLE jobs ADD COLUMN action TEXT DEFAULT 'translate'",
                 "ALTER TABLE jobs ADD COLUMN provider TEXT DEFAULT ''",
                 "ALTER TABLE jobs ADD COLUMN verify_note TEXT",
+                "ALTER TABLE jobs ADD COLUMN log TEXT",
                 "ALTER TABLE model_daily_calls ADD COLUMN fails INTEGER DEFAULT 0"):
         try:
             conn.execute(ddl)
@@ -152,6 +153,14 @@ def list_jobs(limit=50):
     ).fetchall()]
     conn.close()
     return rows
+
+
+def set_job_log(job_id, text):
+    """Store the log lines captured while a job ran (shown per-job in the Queue)."""
+    conn = get_db()
+    conn.execute("UPDATE jobs SET log=? WHERE id=?", (text, job_id))
+    conn.commit()
+    conn.close()
 
 
 def delete_job(job_id):

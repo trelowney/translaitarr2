@@ -1,126 +1,151 @@
 {% extends "base.html" %}
 {% block title %}Queue · translAItarr2{% endblock %}
 {% block content %}
-<h1>Queue</h1>
-<p class="sub">Live — updates automatically while jobs run.</p>
-
-<div id="usage-line">
-  <div class="card">
-    <h2>Today <span class="hint" style="font-weight:400">— resets daily</span></h2>
-    <div class="hint">Translation requests today: <strong>{{ usage.total }}</strong> / {{ usage.limit }}</div>
-    {% if usage.per_model %}<div class="usage-models">{% for m, s in usage.per_model.items() %}<div>{{ m }} <span class="hint">— {{ s.ok }} ok{% if s.fail %} · {{ s.fail }} failed{% endif %}</span></div>{% endfor %}</div>{% endif %}
-    <div class="usage-outcomes">✅ {{ usage.outcomes.translated }} translated · ⏭ {{ usage.outcomes.skipped }} skipped · ❌ {{ usage.outcomes.errors }} failed</div>
-  </div>
-  {% if usage.providers %}<div class="card">
-    <h2>Provider credit <span class="hint" style="font-weight:400">— account balance, not today's usage</span></h2>
-    <div class="usage-providers">{% for p in usage.providers %}<div><strong>{{ p.name }}</strong> <span class="hint">— {{ p.detail }}</span></div>{% endfor %}</div>
-  </div>{% endif %}
-  <div class="card">
-    <h2>System <span class="hint" style="font-weight:400">— right now</span></h2>
-    <div class="usage-sys">CPU {{ usage.system.cpu_pct if usage.system.cpu_pct is not none else '—' }}% · RAM {{ usage.system.ram_mb if usage.system.ram_mb is not none else '—' }} MB</div>
-  </div>
-</div>
-
-<div class="toolbar">
-  <span class="spacer"></span>
+<div class="topline">
+  <div><div class="eyebrow">Live</div><h1>Queue</h1><p class="sub">Updates automatically while jobs run.</p></div>
+  <div class="grow"></div>
   <form method="post" action="{{ url_for('clear_finished') }}" style="display:inline"><button class="btn" type="submit">Clear finished</button></form>
 </div>
 
-<div class="card" style="padding:0">
-  <table>
-    <thead>
-      <tr><th>#</th><th>Title</th><th>Status</th><th>Added</th><th>Finished</th><th>Detail</th><th style="width:120px"></th></tr>
-    </thead>
-    <tbody id="jobs-body">
-      {% for j in jobs %}
-      <tr>
-        <td>{{ j.id }}</td>
-        <td>{{ j.title }}</td>
-        <td><span class="chip {{ j.chip }}">{{ j.status }}</span></td>
-        <td class="hint">{{ j.added }}</td>
-        <td class="hint">{{ j.finished }}</td>
-        <td class="hint">{{ j.detail }}{% if j.note %}<details class="verify-note"><summary>flagged cues</summary><pre>{{ j.note }}</pre></details>{% endif %}</td>
-        <td class="actions">
-          {% if j.status == 'error' %}<button class="small" data-act="retry" data-id="{{ j.id }}">Retry</button>{% endif %}
-          <button class="small xbtn" data-act="delete" data-id="{{ j.id }}" title="Remove">&times;</button>
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="7" class="empty">Queue is empty.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
+<div class="wrap">
+  <div class="stats" id="usage-line">
+    <div class="stat">
+      <div class="k">Today</div>
+      <div class="v">{{ usage.total }} <small>/ {{ usage.limit }} requests</small></div>
+      <div class="bar"><i style="width:{{ ((usage.total / usage.limit * 100) if usage.limit else 0)|round(1) }}%"></i></div>
+      {% if usage.per_model %}<div class="usage-models">{% for m, s in usage.per_model.items() %}<div>{{ m }} — {{ s.ok }} ok{% if s.fail %} · {{ s.fail }} failed{% endif %}</div>{% endfor %}</div>{% endif %}
+    </div>
+    <div class="stat"><div class="k">Outcomes</div><div class="small">✅ {{ usage.outcomes.translated }} done · ⏭ {{ usage.outcomes.skipped }} skipped · ❌ {{ usage.outcomes.errors }} failed</div></div>
+    {% if usage.providers %}<div class="stat"><div class="k">Provider credit</div><div class="usage-providers">{% for p in usage.providers %}<div><strong>{{ p.name }}</strong> — {{ p.detail }}</div>{% endfor %}</div></div>{% endif %}
+    <div class="stat"><div class="k">System</div><div class="line usage-sys">CPU {{ usage.system.cpu_pct if usage.system.cpu_pct is not none else '—' }}% · RAM {{ usage.system.ram_mb if usage.system.ram_mb is not none else '—' }} MB</div></div>
+  </div>
 
-<div class="card">
-  <h2>Live log <span class="hint">— newest first</span></h2>
-  <div class="log" id="log">{{ log }}</div>
+  <div class="jobs" id="jobs-body">
+    {% for j in jobs %}
+    <div class="job">
+      <div class="jid">#{{ j.id }}</div>
+      <div>
+        <div class="jtitle">{{ j.title }}</div>
+        <div class="jdetail">{{ j.detail }}{% if j.added %} · {{ j.added }}{% endif %}{% if j.finished %} → {{ j.finished }}{% endif %}</div>
+        {% if j.note %}<details class="verify-note"><summary>flagged cues</summary><pre>{{ j.note }}</pre></details>{% endif %}
+        {% if j.joblog %}<details class="job-log"><summary>log</summary><pre>{{ j.joblog }}</pre></details>{% endif %}
+      </div>
+      <div><span class="chip {{ j.chip }}">{{ j.status }}</span></div>
+      <div class="jacts">
+        {% if j.status == 'error' %}<button class="btn small" data-act="retry" data-id="{{ j.id }}">Retry</button>{% endif %}
+        <button class="btn small xbtn" data-act="delete" data-id="{{ j.id }}" title="Remove">&times;</button>
+      </div>
+    </div>
+    {% else %}
+    <div class="empty">Queue is empty.</div>
+    {% endfor %}
+  </div>
+
+  <div class="log">
+    <div class="log-h"><span class="live"></span> Live log — newest first
+      <span class="grow" style="flex:1"></span>
+      <button type="button" class="btn small" id="clear-log" data-url="{{ url_for('clear_log') }}">Clear log</button>
+    </div>
+    <pre class="log-body" id="log">{{ log }}</pre>
+  </div>
 </div>
 
 <script>
 (function () {
-  const usageEl = document.getElementById("usage-line");
-  const bodyEl = document.getElementById("jobs-body");
-  const logEl = document.getElementById("log");
-  let last = "";
+  var usageEl = document.getElementById("usage-line");
+  var bodyEl = document.getElementById("jobs-body");
+  var logEl = document.getElementById("log");
 
-  function esc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : s; return d.innerHTML; }
+  function esc(s) { var d = document.createElement("div"); d.textContent = s == null ? "" : s; return d.innerHTML; }
 
   function usageHtml(u) {
-    // Today = daily consumption only.
-    let today = '<div class="hint">Translation requests today: <strong>' + u.total + '</strong> / ' + u.limit + '</div>';
-    const pm = u.per_model || {};
-    const keys = Object.keys(pm);
-    if (keys.length) today += '<div class="usage-models">' + keys.map((m) => {
-      const st = pm[m] || { ok: 0, fail: 0 };
-      return '<div>' + esc(m) + ' <span class="hint">— ' + st.ok + ' ok' + (st.fail ? ' · ' + st.fail + ' failed' : '') + '</span></div>';
+    var pct = u.limit ? Math.min(100, Math.round(u.total / u.limit * 1000) / 10) : 0;
+    var s = '<div class="stat"><div class="k">Today</div><div class="v">' + u.total + ' <small>/ ' + u.limit + ' requests</small></div>'
+          + '<div class="bar"><i style="width:' + pct + '%"></i></div>';
+    var pm = u.per_model || {}, keys = Object.keys(pm);
+    if (keys.length) s += '<div class="usage-models">' + keys.map(function (m) {
+      var st = pm[m] || { ok: 0, fail: 0 };
+      return '<div>' + esc(m) + ' — ' + st.ok + ' ok' + (st.fail ? ' · ' + st.fail + ' failed' : '') + '</div>';
     }).join("") + '</div>';
-    const o = u.outcomes || { translated: 0, skipped: 0, errors: 0 };
-    today += '<div class="usage-outcomes">✅ ' + o.translated + ' translated · ⏭ ' + o.skipped + ' skipped · ❌ ' + o.errors + ' failed</div>';
-    let s = '<div class="card"><h2>Today <span class="hint" style="font-weight:400">— resets daily</span></h2>' + today + '</div>';
-    // Provider credit = standing account balance, its own card so it never reads
-    // as part of today's spend.
-    const prov = u.providers || [];
-    if (prov.length) s += '<div class="card"><h2>Provider credit <span class="hint" style="font-weight:400">— account balance, not today\'s usage</span></h2>'
-      + '<div class="usage-providers">' + prov.map((p) =>
-        '<div><strong>' + esc(p.name) + '</strong> <span class="hint">— ' + esc(p.detail) + '</span></div>').join("") + '</div></div>';
-    const sys = u.system || {};
-    s += '<div class="card"><h2>System <span class="hint" style="font-weight:400">— right now</span></h2>'
-      + '<div class="usage-sys">CPU ' + (sys.cpu_pct == null ? "—" : sys.cpu_pct) + '% · RAM ' + (sys.ram_mb == null ? "—" : sys.ram_mb) + ' MB</div></div>';
+    s += '</div>';
+    var o = u.outcomes || { translated: 0, skipped: 0, errors: 0 };
+    s += '<div class="stat"><div class="k">Outcomes</div><div class="small">✅ ' + o.translated + ' done · ⏭ ' + o.skipped + ' skipped · ❌ ' + o.errors + ' failed</div></div>';
+    var prov = u.providers || [];
+    if (prov.length) s += '<div class="stat"><div class="k">Provider credit</div><div class="usage-providers">'
+      + prov.map(function (p) { return '<div><strong>' + esc(p.name) + '</strong> — ' + esc(p.detail) + '</div>'; }).join("") + '</div></div>';
+    var sys = u.system || {};
+    s += '<div class="stat"><div class="k">System</div><div class="line usage-sys">CPU ' + (sys.cpu_pct == null ? "—" : sys.cpu_pct) + '% · RAM ' + (sys.ram_mb == null ? "—" : sys.ram_mb) + ' MB</div></div>';
     return s;
   }
   function rowHtml(j) {
-    const retry = j.status === "error" ? '<button class="small" data-act="retry" data-id="' + j.id + '">Retry</button> ' : "";
-    const note = j.note ? '<details class="verify-note"><summary>flagged cues</summary><pre>' + esc(j.note) + '</pre></details>' : "";
-    return '<tr><td>' + j.id + '</td><td>' + esc(j.title) + '</td>' +
-      '<td><span class="chip ' + j.chip + '">' + esc(j.status) + '</span></td>' +
-      '<td class="hint">' + esc(j.added) + '</td>' +
-      '<td class="hint">' + esc(j.finished) + '</td>' +
-      '<td class="hint">' + esc(j.detail) + note + '</td>' +
-      '<td class="actions">' + retry +
-      '<button class="small xbtn" data-act="delete" data-id="' + j.id + '" title="Remove">×</button></td></tr>';
+    var retry = j.status === "error" ? '<button class="btn small" data-act="retry" data-id="' + j.id + '">Retry</button>' : "";
+    var note = j.note ? '<details class="verify-note" data-jobid="' + j.id + '" data-kind="note"><summary>flagged cues</summary><pre>' + esc(j.note) + '</pre></details>' : "";
+    var jlog = j.joblog ? '<details class="job-log" data-jobid="' + j.id + '" data-kind="log"><summary>log</summary><pre>' + esc(j.joblog) + '</pre></details>' : "";
+    var detail = esc(j.detail) + (j.added ? ' · ' + esc(j.added) : '') + (j.finished ? ' → ' + esc(j.finished) : '');
+    return '<div class="job"><div class="jid">#' + j.id + '</div>' +
+      '<div><div class="jtitle">' + esc(j.title) + '</div><div class="jdetail">' + detail + '</div>' + note + jlog + '</div>' +
+      '<div><span class="chip ' + j.chip + '">' + esc(j.status) + '</span></div>' +
+      '<div class="jacts">' + retry +
+      '<button class="btn small xbtn" data-act="delete" data-id="' + j.id + '" title="Remove">&times;</button></div></div>';
   }
+  var lastJobs = "", lastUsage = "", lastLog = "";
   function render(d) {
-    const key = JSON.stringify(d);
-    if (key === last) return;
-    last = key;
-    usageEl.innerHTML = usageHtml(d.usage);
-    bodyEl.innerHTML = d.jobs.length
-      ? d.jobs.map(rowHtml).join("")
-      : '<tr><td colspan="7" class="empty">Queue is empty.</td></tr>';
-    logEl.textContent = d.log;
+    // Render jobs only when the jobs themselves change — usage (CPU/RAM) updates
+    // every poll and must not re-render the list, or it would snap open <details> shut.
+    var jobsKey = JSON.stringify(d.jobs);
+    if (jobsKey !== lastJobs) {
+      lastJobs = jobsKey;
+      // Remember which per-job logs / notes are open (+ their scroll offset), then
+      // restore after re-render. Logs are newest-first (top), like the shared log,
+      // so staying at the top keeps the newest line in view; preserving scrollTop
+      // means a reader who scrolled down isn't yanked when new lines arrive.
+      var open = {}, scroll = {};
+      bodyEl.querySelectorAll("details[open]").forEach(function (el) {
+        var k = el.dataset.jobid + ":" + el.dataset.kind;
+        open[k] = true;
+        var pre = el.querySelector("pre");
+        if (pre) scroll[k] = pre.scrollTop;
+      });
+      bodyEl.innerHTML = d.jobs.length ? d.jobs.map(rowHtml).join("") : '<div class="empty">Queue is empty.</div>';
+      bodyEl.querySelectorAll("details").forEach(function (el) {
+        var k = el.dataset.jobid + ":" + el.dataset.kind;
+        if (open[k]) {
+          el.open = true;
+          var pre = el.querySelector("pre");
+          if (pre && scroll[k]) pre.scrollTop = scroll[k];
+        }
+      });
+    }
+    var usageKey = JSON.stringify(d.usage);
+    if (usageKey !== lastUsage) { lastUsage = usageKey; usageEl.innerHTML = usageHtml(d.usage); }
+    if (d.log !== lastLog) { lastLog = d.log; logEl.textContent = d.log; }
   }
   async function poll() {
-    try { const r = await fetch("{{ url_for('api_queue') }}"); if (r.ok) render(await r.json()); } catch (e) { /* keep polling */ }
+    try { var r = await fetch("{{ url_for('api_queue') }}"); if (r.ok) render(await r.json()); } catch (e) { /* keep polling */ }
   }
 
-  bodyEl.addEventListener("click", async (e) => {
-    const btn = e.target.closest("button[data-act]");
+  bodyEl.addEventListener("click", async function (e) {
+    var btn = e.target.closest("button[data-act]");
     if (!btn) return;
-    const url = btn.dataset.act === "retry" ? "/retry/" + btn.dataset.id : "/job/" + btn.dataset.id + "/delete";
+    var url = btn.dataset.act === "retry" ? "/retry/" + btn.dataset.id : "/job/" + btn.dataset.id + "/delete";
     btn.disabled = true;
-    try { await fetch(url, { method: "POST", headers: { "X-Requested-With": "fetch" } }); } catch (e) { /* ignore */ }
-    last = ""; poll();
+    try {
+      await fetch(url, { method: "POST", headers: { "X-Requested-With": "fetch" } });
+      if (typeof toast === "function") toast(btn.dataset.act === "retry" ? "Re-queued." : "Removed.", "ok");
+    } catch (e) { /* ignore */ }
+    lastJobs = ""; poll();
+  });
+
+  var clearBtn = document.getElementById("clear-log");
+  if (clearBtn) clearBtn.addEventListener("click", async function () {
+    clearBtn.disabled = true;
+    try {
+      await fetch(clearBtn.dataset.url, { method: "POST", headers: { "X-Requested-With": "fetch" } });
+      logEl.textContent = "No activity yet.";
+      if (typeof toast === "function") toast("Live log cleared.", "ok");
+    } catch (e) { /* ignore */ }
+    clearBtn.disabled = false;
+    lastJobs = ""; poll();
   });
 
   poll();

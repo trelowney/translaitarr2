@@ -4,31 +4,51 @@
 {% macro secret(name, is_set) -%}
 <div class="secret"><input type="password" name="{{ name }}" data-secret autocomplete="new-password" placeholder="{{ '••••••••' if is_set else '' }}"><button type="button" class="small secret-save" disabled>Save</button><span class="secret-msg hint"></span></div>
 {%- endmacro %}
-<h1>Settings</h1>
-<p class="sub">Most settings save automatically. <b>API keys and the password have their own Save button.</b> Secrets are write-only and shown as ••••. <span id="save-status" class="autosave-status"></span></p>
+{% macro llm_prompt(p) -%}
+<label style="margin-top:18px">Translation prompt <span class="hint">— how this engine is told to translate (LLM only)</span></label>
+<textarea name="{{ p }}_prompt" rows="8" spellcheck="false" style="font-size:12.5px">{{ cfg[p].prompt or default_prompt }}</textarea>
+<p class="hint">Variables (filled in automatically): <code>{source_language}</code> <code>{target_language}</code> <code>{formality}</code> <code>{glossary}</code>. The strict SRT formatting rules are always enforced and aren't editable, so a custom prompt can't break the output. Clear the box to fall back to the built-in default.</p>
+<label>Glossary <span class="hint">— one per line: <code>Term = Translation</code>; kept consistent across episodes</span></label>
+<textarea name="{{ p }}_glossary" rows="3" spellcheck="false" placeholder="Widow's Bay = Vdoví zátoka&#10;Mara = Mara" style="font-size:12.5px">{{ cfg[p].glossary }}</textarea>
+{%- endmacro %}
+<div class="topline"><div><div class="eyebrow">Configuration</div><h1>Settings</h1><p class="sub">Most settings save automatically. <b>API keys and the password have their own Save button.</b> Secrets are write-only and shown as ••••. <span id="save-status" class="autosave-status"></span></p></div></div>
+<div class="wrap">
+<div class="subnav">
+  <a data-tab="connections">Connections</a><a data-tab="providers">Providers</a><a data-tab="languages">Languages</a><a data-tab="automation">Automation</a><a data-tab="translation">Translation</a><a data-tab="advanced">Advanced</a><a data-tab="security">Security</a>
+</div>
 
 <form method="post" action="{{ url_for('settings_save') }}" data-autosave id="settings-form">
-  <div class="card">
+  <div class="card" id="set-connections" data-sec="connections">
     <h2>Sonarr</h2>
     <label>URL</label>
     <input type="text" name="sonarr_url" value="{{ cfg.arr.sonarr.url }}">
     <label>API key <span class="hint">(leave ••••/blank to keep current)</span></label>
     {{ secret("sonarr_api_key", cfg.arr.sonarr.api_key) }}
+    <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-arr="sonarr">Test connection</button><span class="test-msg hint" data-arr-msg="sonarr"></span></div>
   </div>
 
-  <div class="card">
+  <div class="card" data-sec="connections">
     <h2>Radarr</h2>
     <label>URL</label>
     <input type="text" name="radarr_url" value="{{ cfg.arr.radarr.url }}">
     <label>API key <span class="hint">(leave blank to keep current)</span></label>
     {{ secret("radarr_api_key", cfg.arr.radarr.api_key) }}
+    <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-arr="radarr">Test connection</button><span class="test-msg hint" data-arr-msg="radarr"></span></div>
   </div>
 
   {% from "partials/_model_widget.html" import model_widget %}
-  <div class="card">
+  <div class="card" id="set-providers" data-sec="providers">
     <h2>AI providers</h2>
     <p class="hint">Pick which engine translates, with optional fallbacks. The worker tries
       <b>Primary</b> first (every model in order), then <b>Secondary</b>, then <b>Tertiary</b>.</p>
+
+    <label style="margin-top:4px">Providers you use <span class="hint">— only the ticked ones show below and are offered when you translate. Untick the ones you don't use to declutter.</span></label>
+    <input type="hidden" name="provider_enabled_present" value="1">
+    <div class="lang-grid" id="provider-enable">
+      {% for v, l in all_providers %}
+      <div class="check"><input type="checkbox" name="enable_{{ v }}" data-enable="{{ v }}" {{ 'checked' if cfg.provider_enabled.get(v, True) }}><span>{{ l }}</span></div>
+      {% endfor %}
+    </div>
     <div class="row">
       <div>
         <label>Primary</label>
@@ -45,6 +65,7 @@
           <option value="yandex" {{ 'selected' if cfg.ai.primary == 'yandex' }}>Yandex</option>
           <option value="cf_m2m100" {{ 'selected' if cfg.ai.primary == 'cf_m2m100' }}>Cloudflare m2m100</option>
           <option value="gtranslate_free" {{ 'selected' if cfg.ai.primary == 'gtranslate_free' }}>Google Translate (free, no key)</option>
+          <option value="mymemory" {{ 'selected' if cfg.ai.primary == 'mymemory' }}>MyMemory (free, no key)</option>
         </select>
       </div>
       <div>
@@ -63,6 +84,7 @@
           <option value="yandex" {{ 'selected' if cfg.ai.secondary == 'yandex' }}>Yandex</option>
           <option value="cf_m2m100" {{ 'selected' if cfg.ai.secondary == 'cf_m2m100' }}>Cloudflare m2m100</option>
           <option value="gtranslate_free" {{ 'selected' if cfg.ai.secondary == 'gtranslate_free' }}>Google Translate (free, no key)</option>
+          <option value="mymemory" {{ 'selected' if cfg.ai.secondary == 'mymemory' }}>MyMemory (free, no key)</option>
         </select>
       </div>
       <div>
@@ -81,6 +103,7 @@
           <option value="yandex" {{ 'selected' if cfg.ai.tertiary == 'yandex' }}>Yandex</option>
           <option value="cf_m2m100" {{ 'selected' if cfg.ai.tertiary == 'cf_m2m100' }}>Cloudflare m2m100</option>
           <option value="gtranslate_free" {{ 'selected' if cfg.ai.tertiary == 'gtranslate_free' }}>Google Translate (free, no key)</option>
+          <option value="mymemory" {{ 'selected' if cfg.ai.tertiary == 'mymemory' }}>MyMemory (free, no key)</option>
         </select>
       </div>
     </div>
@@ -98,6 +121,7 @@
       <button type="button" class="provider-tab" data-provider-tab="yandex">Yandex</button>
       <button type="button" class="provider-tab" data-provider-tab="cf_m2m100">CF m2m100</button>
       <button type="button" class="provider-tab" data-provider-tab="gtranslate_free">Google free</button>
+      <button type="button" class="provider-tab" data-provider-tab="mymemory">MyMemory</button>
     </div>
 
     <div class="provider-panel" data-provider-panel="gemini">
@@ -108,6 +132,7 @@
                       cfg.translation.batch_size, cfg.limits.max_daily_per_model,
                       "models", "model_batch", "model_daily_limit",
                       "/api/gemini/models", "gemini_api_key") }}
+      {{ llm_prompt("gemini") }}
     </div>
 
     <div class="provider-panel" data-provider-panel="openrouter" hidden>
@@ -120,6 +145,7 @@
                       cfg.translation.batch_size, cfg.limits.max_daily_per_model,
                       "or_models", "or_model_batch", "or_model_daily_limit",
                       "/api/openrouter/models", "openrouter_api_key", browser=True) }}
+      {{ llm_prompt("openrouter") }}
     </div>
 
     <div class="provider-panel" data-provider-panel="openai_compat" hidden>
@@ -156,6 +182,7 @@
                       "oc_models", "oc_model_batch", "oc_model_daily_limit",
                       "/api/openai/models", "openai_compat_api_key",
                       display="OpenAI-compatible", url_field="openai_base_url") }}
+      {{ llm_prompt("openai_compat") }}
     </div>
 
     <div class="provider-panel" data-provider-panel="anthropic" hidden>
@@ -168,6 +195,7 @@
                       cfg.translation.batch_size, cfg.limits.max_daily_per_model,
                       "an_models", "an_model_batch", "an_model_daily_limit",
                       "/api/anthropic/models", "anthropic_api_key", display="Claude") }}
+      {{ llm_prompt("anthropic") }}
     </div>
 
     <div class="provider-panel" data-provider-panel="cloudflare" hidden>
@@ -185,6 +213,7 @@
                       "cf_models", "cf_model_batch", "cf_model_daily_limit",
                       "/api/cloudflare/models", "cloudflare_api_key",
                       display="Workers AI", url_field="cloudflare_account_id") }}
+      {{ llm_prompt("cloudflare") }}
     </div>
 
     <div class="provider-panel" data-provider-panel="deepl" hidden>
@@ -250,24 +279,38 @@
       <p class="hint"><b>Google Translate (free, no key)</b> — the unofficial keyless endpoint. <b>No
         sign-up</b>, but quality is poor, it may rate-limit, and it's not meant for heavy use. Here as
         a last-resort / zero-setup option.</p>
+      <label>Throttle <span class="hint">— ms to wait between requests; <b>0 = unlimited</b>. Raise it if you hit rate limits.</span></label>
+      <input type="number" name="throttle_gtranslate_free" min="0" value="{{ cfg.provider_throttle.get('gtranslate_free', 0) }}">
       <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="gtranslate_free" data-test-url="/api/gtfree/test">Test</button><span class="test-msg hint"></span></div>
       <p class="hint">Set it in the priority slots above — no configuration needed.</p>
     </div>
+
+    <div class="provider-panel" data-provider-panel="mymemory" hidden>
+      <p class="hint"><b>MyMemory (free, no key)</b> — a free translation API with broad language
+        coverage and <b>no sign-up</b>. Quality is modest and it's rate-limited (one request per cue),
+        so it's a low-volume / zero-setup option. Adding an <b>email</b> below raises the daily quota.</p>
+      <label>Contact email <span class="hint">(optional — raises the free daily limit)</span></label>
+      <input type="text" name="mymemory_email" value="{{ cfg.mymemory.email }}" placeholder="you@example.com">
+      <label>Throttle <span class="hint">— ms to wait between requests; <b>0 = unlimited</b>. Raise it if you hit rate limits.</span></label>
+      <input type="number" name="throttle_mymemory" min="0" value="{{ cfg.provider_throttle.get('mymemory', 0) }}">
+      <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-provider="mymemory" data-test-url="/api/mymemory/test">Test</button><span class="test-msg hint"></span></div>
+      <p class="hint">Set it in the priority slots above to use it.</p>
+    </div>
   </div>
 
-  <div class="card">
+  <div class="card" id="set-languages" data-sec="languages">
     <h2>Languages</h2>
     {% include "partials/_languages.html" %}
   </div>
 
-  <div class="card">
+  <div class="card" id="set-automation" data-sec="automation">
     <h2>Automation</h2>
     <div class="check"><input type="checkbox" name="automation_enabled" {{ 'checked' if cfg.automation.enabled }}><span>Automatically translate new titles missing the target language</span></div>
     <label>Scan interval (minutes)</label>
     <input type="number" name="scan_interval" value="{{ cfg.automation.scan_interval_minutes }}">
   </div>
 
-  <div class="card">
+  <div class="card" data-sec="automation">
     <h2>Limits</h2>
     <div class="row">
       <div><label>Total requests / day</label><input type="number" name="max_daily_total" value="{{ cfg.limits.max_daily_total }}"></div>
@@ -276,7 +319,7 @@
     <p class="hint">Per-model daily limits are set per model in the AI providers section above.</p>
   </div>
 
-  <div class="card">
+  <div class="card" id="set-advanced" data-sec="advanced">
     <h2>SDH stripping</h2>
     <div class="check"><input type="checkbox" name="sdh_brackets" {{ 'checked' if cfg.sdh.brackets }}><span>[bracketed] cues</span></div>
     <div class="check"><input type="checkbox" name="sdh_parens" {{ 'checked' if cfg.sdh.parens }}><span>(parenthesised) cues</span></div>
@@ -285,13 +328,20 @@
     <div class="check"><input type="checkbox" name="sdh_uppercase" {{ 'checked' if cfg.sdh.uppercase }}><span>FULLY UPPERCASE lines</span></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="set-translation" data-sec="translation">
     <h2>Translation</h2>
     <label>Subtitle source <span class="hint">— where to take the text to translate (movies &amp; episodes)</span></label>
     <select name="source_preference">
       <option value="video" {{ 'selected' if cfg.translation.source_preference == 'video' }}>From the video — embedded text / Blu-ray PGS (OCR)</option>
       <option value="sidecar" {{ 'selected' if cfg.translation.source_preference == 'sidecar' }}>Prefer an external .srt next to the file, fall back to the video</option>
     </select>
+    <label style="margin-top:14px">Address — formality <span class="hint">— polite vs familiar “you”, for target languages that distinguish it (e.g. German Sie/du, French vous/tu)</span></label>
+    <select name="formality">
+      <option value="auto" {{ 'selected' if cfg.translation.formality == 'auto' }}>Auto — informal by default, formal when the context needs it</option>
+      <option value="formal" {{ 'selected' if cfg.translation.formality == 'formal' }}>Formal (polite address)</option>
+      <option value="informal" {{ 'selected' if cfg.translation.formality == 'informal' }}>Informal (familiar address)</option>
+    </select>
+    <p class="hint">DeepL applies its native formality setting; LLM engines receive it as a prompt instruction (the <code>{formality}</code> variable).</p>
     <div class="check" style="margin-top:14px"><input type="checkbox" name="verify_enabled" {{ 'checked' if cfg.translation.verify }}><span>Verify each translation automatically <span class="hint">— back-translate a sample to the source language and flag dubious jobs (one extra request per job)</span></span></div>
     <label>Verify samples <span class="hint">— cues checked per verification</span></label>
     <input type="number" name="verify_samples" value="{{ cfg.translation.verify_samples }}">
@@ -300,7 +350,7 @@
     <p class="hint">Batch size is set per model in the AI providers section above. Manual verification is the &ldquo;Verify&rdquo; button on a translated title in the Library.</p>
   </div>
 
-  <div class="card">
+  <div class="card" data-sec="translation">
     <h2>Subtitle validation</h2>
     <div class="check"><input type="checkbox" name="validation_enabled" {{ 'checked' if cfg.validation.enabled }}><span>Drop junk cues before translating (out-of-range text length or duration)</span></div>
     <div class="row">
@@ -313,7 +363,7 @@
     </div>
   </div>
 
-  <div class="card">
+  <div class="card" data-sec="advanced">
     <h2>Path mapping <span class="hint">— only if files can't be found</span></h2>
     <p class="hint">These are the folders Sonarr/Radarr use (left). Tell translAItarr2 where each one lives on its side (right). If they're identical — the usual case — just leave them.</p>
     <table class="remap-table" id="remap-table" data-current='{{ cfg.paths.remap | tojson }}'>
@@ -327,7 +377,7 @@
     </div>
   </div>
 
-  <div class="card">
+  <div class="card" data-sec="advanced">
     <h2>Anonymous statistics</h2>
     <div class="check"><input type="checkbox" name="telemetry_enabled" {{ 'checked' if cfg.telemetry.enabled }}><span>Help count how many translAItarr2 instances are running</span></div>
     <p class="hint">When on, the app sends <b>once a day</b> only a <b>random id</b> (generated on this
@@ -339,7 +389,7 @@
 
 </form>
 
-<form method="post" action="{{ url_for('settings_auth') }}" class="card" style="margin-top:0">
+<form method="post" action="{{ url_for('settings_auth') }}" class="card" id="set-security" data-sec="security" style="margin-top:0">
   <h2>Security</h2>
   {% with msgs = get_flashed_messages(category_filter=["auth"]) %}
     {% if msgs %}<p class="hint" style="color:var(--red)">{{ msgs[0] }}</p>{% endif %}
@@ -354,4 +404,25 @@
   <p class="hint">The login cookie is persistent, so closing the browser (or backgrounding it on mobile) no longer logs you out before this expires. A new sign-in picks up any change here.</p>
   <div class="model-add" style="margin-top:12px"><button type="submit" class="small">Save security settings</button></div>
 </form>
+</div>
+
+<script>
+(function () {
+  // Settings as tabs: show one section at a time (declutters the long form).
+  // Every card stays in the DOM, so autosave and the drag-to-reorder model lists
+  // keep working across hidden sections.
+  var tabs = document.querySelectorAll('.subnav [data-tab]');
+  var cards = document.querySelectorAll('[data-sec]');
+  if (!tabs.length) return;
+  var valid = {}; tabs.forEach(function (t) { valid[t.dataset.tab] = 1; });
+  function show(name) {
+    cards.forEach(function (c) { c.style.display = (c.dataset.sec === name) ? '' : 'none'; });
+    tabs.forEach(function (t) { t.classList.toggle('active', t.dataset.tab === name); });
+    try { history.replaceState(null, '', '#' + name); } catch (e) {}
+  }
+  tabs.forEach(function (t) { t.addEventListener('click', function (e) { e.preventDefault(); show(t.dataset.tab); window.scrollTo(0, 0); }); });
+  var initial = (location.hash || '').replace('#', '');
+  show(valid[initial] ? initial : 'connections');
+})();
+</script>
 {% endblock %}

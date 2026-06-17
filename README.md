@@ -48,10 +48,10 @@ translAItarr2 handles those cases:
   picks the best source language by your configured priority.
 - **Knows what a title already has** — skips files that already carry your target
   language and shows whether that's **audio (dub)**, **subtitles**, or both.
-- **Your choice of translation engine — 12 providers** across LLMs (Gemini, OpenRouter,
+- **Your choice of translation engine — 13 providers** across LLMs (Gemini, OpenRouter,
   Anthropic Claude, Cloudflare Workers AI, and any OpenAI-compatible / local server such
   as Ollama, LM Studio, vLLM, Groq or DeepSeek) and dedicated machine translation (DeepL,
-  LibreTranslate, Google, Microsoft/Azure, Yandex, Cloudflare m2m100, keyless Google).
+  LibreTranslate, Google, Microsoft/Azure, Yandex, Cloudflare m2m100, keyless Google, MyMemory).
   Pick a **primary plus two fallbacks** (fallback can cross providers), drag-reorder models
   per provider with **per-model batch size and daily request limit**, or **override the
   provider per job** from the Library. Tuned out of the box for Gemini's free tier.
@@ -79,8 +79,11 @@ Where things stand:
 **Working now**
 - Sonarr/Radarr library view with real titles, grouped into Movies / TV Shows
 - Per-title, bulk and automatic translation; re-translate on release upgrade; manual re-translate
-- **12 translation providers** (see [Translation providers](#translation-providers)) with
-  cross-provider fallback, per-model batch sizes/daily limits, and a **per-job provider override**
+- **13 translation providers** (see [Translation providers](#translation-providers)) with
+  cross-provider fallback, per-model batch sizes/daily limits, a **per-job provider override**,
+  and per-provider enable toggles
+- **Per-provider editable prompt + glossary** (LLM engines) and a **global formality** setting
+  (informal/formal address) — applied natively for DeepL, via the prompt for LLMs
 - Embedded-subtitle extraction and PGS (Blu-ray) OCR
 - Selectable source: translate the **video's embedded subtitle** or **prefer an external `.srt`** next to it
 - Skip rules following your configured target language (shows whether a title already has target **audio**, **subtitles**, or both); SDH stripping; output validation
@@ -89,8 +92,6 @@ Where things stand:
 - Path remapping (UI), in-app update check, multi-arch Docker image
 
 **Planned (later)**
-- **Per-provider system prompt / glossary** and **DeepL formality** (formal vs informal address) — for consistent names/terms across a series
-- More dedicated MT engines on the same path (the plumbing is generic now)
 - UI translations (i18n) — only if the community asks for it; then community-driven via Weblate (the app stays English-first, like Bazarr/Lingarr)
 
 ## Quick start
@@ -170,7 +171,7 @@ every field. Highlights:
 | Area        | What it controls                                                        |
 |-------------|-------------------------------------------------------------------------|
 | Sonarr/Radarr | API URL + key for each (used to list the library with proper titles). |
-| AI providers | Up to three priority slots (primary + 2 fallbacks) across 12 providers; per-provider keys and model lists. See [Translation providers](#translation-providers). |
+| AI providers | Up to three priority slots (primary + 2 fallbacks) across 13 providers; per-provider keys and model lists. See [Translation providers](#translation-providers). |
 | Languages   | Source-language priority order, and your single target language.        |
 | SDH         | Strip captions/sound effects/speaker labels before translating.         |
 | Limits      | Daily per-model and total request caps; max titles per automation run.  |

@@ -91,7 +91,7 @@ PROVIDER_LABELS = {
     "anthropic": "Anthropic (Claude)", "cloudflare": "Cloudflare Workers AI",
     "deepl": "DeepL", "libretranslate": "LibreTranslate", "google": "Google Translate",
     "azure": "Microsoft / Azure", "yandex": "Yandex", "cf_m2m100": "Cloudflare m2m100",
-    "gtranslate_free": "Google Translate (free)",
+    "gtranslate_free": "Google Translate (free)", "mymemory": "MyMemory (free)",
 }
 
 PUBLIC_ENDPOINTS = {"health", "static", "login", "setup", "setup_submit", "favicon"}
@@ -102,7 +102,8 @@ WIZARD_API = {"arr_test", "gemini_models", "gemini_test",
               "anthropic_models", "anthropic_test",
               "cloudflare_models", "cloudflare_test",
               "deepl_test", "libretranslate_test",
-              "google_test", "azure_test", "yandex_test", "cfm2m_test", "gtfree_test"}
+              "google_test", "azure_test", "yandex_test", "cfm2m_test", "gtfree_test",
+              "mymemory_test"}
 
 
 @app.before_request
@@ -142,6 +143,13 @@ def inject_langs():
 @app.context_processor
 def inject_assets():
     return {"asset_ver": ASSET_VER}
+
+
+@app.context_processor
+def inject_theme():
+    # Theme is a client preference stored in the t2_theme cookie; dark is the default.
+    # Rendering it server-side lets base.html set <html data-theme> with no flash.
+    return {"theme": "light" if request.cookies.get("t2_theme") == "light" else "dark"}
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -246,8 +254,12 @@ def rescan():
 def arr_test():
     data = request.get_json(silent=True) or request.form
     service = (data.get("service") or "").lower()
+    service = "radarr" if service == "radarr" else "sonarr"
+    saved = cfgmod.load_config()["arr"][service]
+    url = (data.get("url") or "").strip() or saved.get("url", "")
+    key = (data.get("api_key") or "").strip() or saved.get("api_key", "")
     client_cls = arr.RadarrClient if service == "radarr" else arr.SonarrClient
-    ok, message = client_cls(data.get("url", ""), data.get("api_key", "")).test()
+    ok, message = client_cls(url, key).test()
     return jsonify({"ok": ok, "message": message})
 
 
@@ -497,6 +509,15 @@ def gtfree_test():
     return jsonify({"ok": True, "message": f"Reachable — 'OK' → '{out}' (no key needed)"})
 
 
+@app.route("/api/mymemory/test", methods=["POST"], endpoint="mymemory_test")
+def mymemory_test():
+    try:
+        out = translator.mt_probe("mymemory", cfgmod.load_config())
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"ok": False, "message": str(e)})
+    return jsonify({"ok": True, "message": f"Reachable — 'OK' → '{out}' (no key needed)"})
+
+
 @app.route("/api/arr/rootfolders", methods=["POST"], endpoint="arr_rootfolders")
 def arr_rootfolders():
     return jsonify({"folders": arr.all_root_folders(cfgmod.load_config())})
@@ -543,11 +564,14 @@ def _fmt_ts(ts):
 _PUSAGE = {"at": 0.0, "data": []}
 
 
-def _provider_usage(cfg, ttl=600):
+def _provider_usage(cfg, version=0, ttl=600):
     """Live usage for providers that expose it (DeepL chars, OpenRouter credit).
-    Cached — the Queue page polls every few seconds and must not hammer the APIs."""
+    Cached — the Queue page polls every few seconds and must not hammer the APIs.
+    `version` (today's request count) busts the cache as soon as a translation
+    happens, so credits refresh right after a job without a page reload; the TTL
+    only caps idle refetching when nothing has been translated."""
     now = time.time()
-    if now - _PUSAGE["at"] < ttl:
+    if now - _PUSAGE["at"] < ttl and _PUSAGE.get("ver") == version:
         return _PUSAGE["data"]
     out = []
     if cfg["deepl"].get("api_key"):
@@ -564,12 +588,14 @@ def _provider_usage(cfg, ttl=600):
         except Exception:  # noqa: BLE001
             pass
     _PUSAGE["at"] = now
+    _PUSAGE["ver"] = version
     _PUSAGE["data"] = out
     return out
 
 
 def _queue_data():
     cfg = cfgmod.load_config()
+    live_id, live_log = worker.live_job_log()   # running job's log, streamed live
     jobs = []
     for j in db.list_jobs():
         result = j.get("result") or ""
@@ -584,14 +610,16 @@ def _queue_data():
             "finished": _fmt_ts(j.get("finished_at")),
             "detail": j.get("error") or result,
             "note": j.get("verify_note") or "",
+            "joblog": (live_log if j["id"] == live_id and live_log else (j.get("log") or "")),
         })
+    total = db.today_total()
     usage = {
-        "total": db.today_total(),
+        "total": total,
         "limit": cfg["limits"].get("max_daily_total", 120),
         "per_model": db.today_model_stats(),
         "outcomes": db.outcome_counts(),
         "system": stats.container_stats(),
-        "providers": _provider_usage(cfg),
+        "providers": _provider_usage(cfg, version=total),
     }
     return jobs, usage, _log_tail()
 
@@ -608,11 +636,17 @@ def api_queue():
     return jsonify({"jobs": jobs, "usage": usage, "log": log})
 
 
+def _wants_json():
+    return request.headers.get("X-Requested-With") == "fetch"
+
+
 @app.route("/translate", methods=["POST"])
 def translate():
     path = request.form.get("path", "")
     title = request.form.get("title", "")
     if not path:
+        if _wants_json():
+            return jsonify({"ok": False, "message": "No file path provided."}), 400
         flash("No file path provided.")
         return redirect(url_for("library"))
     force = request.form.get("force") == "1"
@@ -622,9 +656,12 @@ def translate():
     added, info = db.add_job(path, title, source="manual", force=force, provider=provider)
     via = f" via {PROVIDER_LABELS.get(provider, provider)}" if provider else ""
     if added:
-        flash((f"Queued for re-translation: {title or path}" if force else f"Queued: {title or path}") + via)
+        msg = (f"Queued for re-translation: {title or path}" if force else f"Queued: {title or path}") + via
     else:
-        flash(f"Already queued (job {info}).")
+        msg = f"Already queued (job {info})."
+    if _wants_json():
+        return jsonify({"ok": True, "added": bool(added), "job_id": info, "message": msg})
+    flash(msg)
     return redirect(url_for("queue"))
 
 
@@ -633,10 +670,15 @@ def verify():
     path = request.form.get("path", "")
     title = request.form.get("title", "")
     if not path:
+        if _wants_json():
+            return jsonify({"ok": False, "message": "No file path provided."}), 400
         flash("No file path provided.")
         return redirect(url_for("library"))
     added, info = db.add_job(path, title, source="manual", action="verify")
-    flash(f"Queued for verification: {title or path}" if added else f"Already queued (job {info}).")
+    msg = (f"Queued for verification: {title or path}" if added else f"Already queued (job {info}).")
+    if _wants_json():
+        return jsonify({"ok": True, "added": bool(added), "job_id": info, "message": msg})
+    flash(msg)
     return redirect(url_for("queue"))
 
 
@@ -651,14 +693,64 @@ def translate_all():
         if r["translatable"] and db.add_job(r["local_path"], r["title"], source="manual", provider=provider)[0]:
             n += 1
     via = f" via {PROVIDER_LABELS.get(provider, provider)}" if provider else ""
-    flash(f"Queued {n} title(s) for translation{via}.")
+    msg = f"Queued {n} title(s) for translation{via}."
+    if _wants_json():
+        return jsonify({"ok": True, "queued": n, "message": msg})
+    flash(msg)
+    return redirect(url_for("queue"))
+
+
+def _bulk_pairs(f):
+    """Parallel paths[]/titles[] from the form, zipped and de-blanked."""
+    paths = f.getlist("paths")
+    titles = f.getlist("titles")
+    out = []
+    for i, p in enumerate(paths):
+        if p:
+            out.append((p, titles[i] if i < len(titles) else ""))
+    return out
+
+
+@app.route("/bulk/translate", methods=["POST"])
+def bulk_translate():
+    """Queue several library titles for translation in one go (one chosen provider)."""
+    force = request.form.get("force") == "1"
+    provider = request.form.get("provider", "").strip()
+    if provider not in translator.PROVIDERS:
+        provider = ""
+    n = 0
+    for path, title in _bulk_pairs(request.form):
+        if db.add_job(path, title, source="manual", force=force, provider=provider)[0]:
+            n += 1
+    via = f" via {PROVIDER_LABELS.get(provider, provider)}" if provider else ""
+    msg = f"Queued {n} title(s) for translation{via}."
+    if _wants_json():
+        return jsonify({"ok": True, "queued": n, "message": msg})
+    flash(msg)
+    return redirect(url_for("queue"))
+
+
+@app.route("/bulk/verify", methods=["POST"])
+def bulk_verify():
+    """Queue several library titles for back-translation verification in one go."""
+    n = 0
+    for path, title in _bulk_pairs(request.form):
+        if db.add_job(path, title, source="manual", action="verify")[0]:
+            n += 1
+    msg = f"Queued {n} title(s) for verification."
+    if _wants_json():
+        return jsonify({"ok": True, "queued": n, "message": msg})
+    flash(msg)
     return redirect(url_for("queue"))
 
 
 @app.route("/retry/<int:job_id>", methods=["POST"])
 def retry(job_id):
     db.retry(job_id)
-    flash(f"Job {job_id} re-queued.")
+    msg = f"Job {job_id} re-queued."
+    if _wants_json():
+        return jsonify({"ok": True, "job_id": job_id, "message": msg})
+    flash(msg)
     return redirect(url_for("queue"))
 
 
@@ -675,9 +767,41 @@ def clear_finished():
     return redirect(url_for("queue"))
 
 
+@app.route("/queue/clear-log", methods=["POST"])
+def clear_log():
+    """Empty the shared live log (truncate the file via its handler, drop rotated
+    backups). Per-job logs are unaffected."""
+    try:
+        if "fh" in globals() and fh is not None:
+            fh.acquire()                        # handler's own lock — don't truncate mid-write
+            try:
+                if fh.stream:
+                    fh.stream.seek(0)
+                    fh.stream.truncate(0)
+            finally:
+                fh.release()
+        for i in range(1, 9):                   # rotated backups: app.log.1, .2, …
+            bak = f"{cfgmod.LOG_FILE}.{i}"
+            if os.path.exists(bak):
+                os.remove(bak)
+        log.info("Live log cleared.")
+    except OSError as e:
+        if _wants_json():
+            return jsonify({"ok": False, "message": str(e)}), 500
+        flash(f"Could not clear the log: {e}")
+        return redirect(url_for("queue"))
+    if _wants_json():
+        return jsonify({"ok": True, "message": "Log cleared."})
+    flash("Live log cleared.")
+    return redirect(url_for("queue"))
+
+
 @app.route("/settings")
 def settings():
-    return render_template("settings.html", cfg=cfgmod.redact(cfgmod.load_config()), active="settings")
+    return render_template("settings.html", cfg=cfgmod.redact(cfgmod.load_config()),
+                           default_prompt=translator.DEFAULT_LLM_PROMPT,
+                           all_providers=[(p, PROVIDER_LABELS.get(p, p)) for p in translator.PROVIDERS],
+                           active="settings")
 
 
 def _int(value, default):
@@ -789,6 +913,12 @@ def settings_save():
         cfg["azure"]["region"] = f.get("azure_region", "").strip()
     if "yandex_folder_id" in f:
         cfg["yandex"]["folder_id"] = f.get("yandex_folder_id", "").strip()
+    if "mymemory_email" in f:
+        cfg["mymemory"]["email"] = f.get("mymemory_email", "").strip()
+    # Optional per-engine self-throttle (ms between requests; 0 = unlimited).
+    for p in ("mymemory", "gtranslate_free", "cf_m2m100"):
+        if f"throttle_{p}" in f:
+            cfg.setdefault("provider_throttle", {})[p] = max(0, _int(f.get(f"throttle_{p}"), 0))
 
     _apply_lang_model_fields(cfg, f)
     _apply_provider_models(cfg, f, "openrouter", "or_models", "or_model_batch",
@@ -799,6 +929,11 @@ def settings_save():
                            "an_model_daily_limit")
     _apply_provider_models(cfg, f, "cloudflare", "cf_models", "cf_model_batch",
                            "cf_model_daily_limit")
+
+    # Per-provider enable toggles (only when the checklist was submitted, so other
+    # autosaves don't wipe them). An unchecked box sends nothing -> stored False.
+    if "provider_enabled_present" in f:
+        cfg["provider_enabled"] = {p: (f.get(f"enable_{p}") == "on") for p in translator.PROVIDERS}
 
     # AI provider priority (primary first, then secondary, then tertiary).
     for slot in ("primary", "secondary", "tertiary"):
@@ -833,6 +968,15 @@ def settings_save():
     cfg["translation"]["verify"] = f.get("verify_enabled") == "on"
     cfg["translation"]["verify_samples"] = _int(f.get("verify_samples"), cfg["translation"]["verify_samples"])
     cfg["translation"]["cleanup_superseded"] = f.get("cleanup_superseded") == "on"
+    if f.get("formality") in ("auto", "formal", "informal"):
+        cfg["translation"]["formality"] = f["formality"]
+
+    # Per-LLM-provider custom prompt + glossary (MT engines have no prompt).
+    for p in ("gemini", "openrouter", "openai_compat", "anthropic", "cloudflare"):
+        if f"{p}_prompt" in f:
+            cfg[p]["prompt"] = f.get(f"{p}_prompt", "")
+        if f"{p}_glossary" in f:
+            cfg[p]["glossary"] = f.get(f"{p}_glossary", "")
 
     cfg["telemetry"]["enabled"] = f.get("telemetry_enabled") == "on"
 

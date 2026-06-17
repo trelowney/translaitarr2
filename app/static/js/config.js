@@ -183,6 +183,48 @@ document.querySelectorAll(".model-widget").forEach(initModelWidget);
   }));
 })();
 
+// ── Enabled providers: hide the tab + config panel of unticked engines ───────
+(function () {
+  const boxes = [...document.querySelectorAll("#provider-enable [data-enable]")];
+  if (!boxes.length) return;
+  function tab(v) { return document.querySelector('.provider-tab[data-provider-tab="' + v + '"]'); }
+  function panel(v) { return document.querySelector('[data-provider-panel="' + v + '"]'); }
+  function apply() {
+    boxes.forEach((b) => {
+      const t = tab(b.dataset.enable), p = panel(b.dataset.enable);
+      if (t) t.hidden = !b.checked;
+      if (p && !b.checked) p.hidden = true;   // disabled → always hidden
+    });
+    // If the active tab got hidden, switch to the first visible one.
+    const active = document.querySelector(".provider-tab.active");
+    if (active && active.hidden) {
+      const first = [...document.querySelectorAll(".provider-tab")].find((t) => !t.hidden);
+      if (first) first.click();
+    }
+  }
+  boxes.forEach((b) => b.addEventListener("change", apply));
+  apply();
+})();
+
+// ── Sonarr / Radarr connection test ──────────────────────────────────────────
+document.querySelectorAll("[data-test-arr]").forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    const svc = btn.dataset.testArr;
+    const url = (document.querySelector("[name=" + svc + "_url]") || {}).value || "";
+    const key = (document.querySelector("[name=" + svc + "_api_key]") || {}).value || "";
+    const msg = document.querySelector('[data-arr-msg="' + svc + '"]');
+    if (msg) { msg.textContent = "Testing…"; msg.style.color = ""; }
+    try {
+      const r = await fetch("/api/arr/test", {
+        method: "POST", headers: { "Content-Type": "application/json", "X-Requested-With": "fetch" },
+        body: JSON.stringify({ service: svc, url: url, api_key: key }),
+      });
+      const d = await r.json();
+      if (msg) { msg.textContent = (d.ok ? "✓ " : "✗ ") + d.message; msg.style.color = d.ok ? "var(--green)" : "var(--red)"; }
+    } catch (e) { if (msg) { msg.textContent = "✗ " + e; msg.style.color = "var(--red)"; } }
+  });
+});
+
 // ── Provider key tests (Gemini / OpenRouter) ─────────────────────────────────
 document.querySelectorAll("[data-test-provider]").forEach((btn) => {
   btn.addEventListener("click", async () => {

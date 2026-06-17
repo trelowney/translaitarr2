@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="{{ theme|default('dark') }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,16 +10,11 @@
        still works if app.css never arrives. Touches no in-page dynamic behaviour. -->
   <script>
     (function () {
-      var RKEY = 't2_boot_retry', SKEY = 't2_boot_seen';
+      var RKEY = 't2_boot_retry';
       var n = 0; try { n = parseInt(sessionStorage.getItem(RKEY) || '0', 10) || 0; } catch (e) {}
-      // Show the splash pre-paint only on the first load of a session, or while we are
-      // in a retry cycle — never flash it on ordinary tab switches (keeps the app feeling instant).
-      try {
-        if (n > 0 || !sessionStorage.getItem(SKEY)) {
-          document.documentElement.className += ' booting';
-          sessionStorage.setItem(SKEY, '1');
-        }
-      } catch (e) {}
+      // Show the splash pre-paint on every load — it bridges the render of each page
+      // (incl. navigation between Library/Queue/Settings/What's New) and hides on load.
+      document.documentElement.className += ' booting';
 
       var scheduled = false, finished = false;
       function stuck() { var s = document.querySelector('#app-boot .ab-stuck'); if (s) s.style.display = 'block'; }
@@ -52,46 +47,45 @@
     })();
   </script>
   <style>
-    /* Splash motif: a subtitle cue that translates itself — exactly what the app does.
+    /* Splash motif: a real SRT cue being translated (es → en) — exactly what the app does.
        Palette and type come from the app's own tokens so it reads as native, not bolted on. */
     #app-boot { display: none; transition: opacity .3s ease; }
     html.booting #app-boot {
       position: fixed; inset: 0; z-index: 9999;
-      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px;
       background: #15171c; color: #9aa1ad;
       font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     }
     #app-boot.ab-hide { opacity: 0; pointer-events: none; }
-    #app-boot .ab-brand { font-weight: 700; font-size: 22px; color: #e6e8ec; letter-spacing: .2px; }
+    #app-boot .ab-brand { font-weight: 700; font-size: 20px; color: #e6e8ec; letter-spacing: .2px; }
     #app-boot .ab-brand b { color: #4f9dff; font-weight: 700; }
 
-    #app-boot .ab-cap { position: relative; min-width: 240px; padding: 11px 24px 15px; background: rgba(0,0,0,.42); border-radius: 11px; }
-    #app-boot .ab-words { position: relative; height: 1.5em; }
-    #app-boot .ab-words span {
-      position: absolute; left: 50%; top: 0; transform: translateX(-50%); white-space: nowrap;
-      color: #e6e8ec; font-size: 16px; font-weight: 600; opacity: 0; animation: ab-cap 7.2s infinite;
-    }
-    #app-boot .ab-words span:nth-child(2) { animation-delay: 1.8s; }
-    #app-boot .ab-words span:nth-child(3) { animation-delay: 3.6s; }
-    #app-boot .ab-words span:nth-child(4) { animation-delay: 5.4s; }
-    @keyframes ab-cap {
-      0%   { opacity: 0; transform: translateX(-50%) translateY(3px); }
-      3%   { opacity: 1; transform: translateX(-50%) translateY(0); }
-      22%  { opacity: 1; transform: translateX(-50%) translateY(0); }
-      25%  { opacity: 0; transform: translateX(-50%) translateY(-3px); }
-      100% { opacity: 0; }
-    }
-    /* The cue's timing bar fills once per caption, like a subtitle's on-screen duration. */
-    #app-boot .ab-cue { position: absolute; left: 16px; right: 16px; bottom: 8px; height: 2px; border-radius: 2px; background: #4f9dff; transform-origin: left center; transform: scaleX(0); animation: ab-cue 1.8s linear infinite; }
-    @keyframes ab-cue { 0% { transform: scaleX(0); opacity: 1; } 92% { transform: scaleX(1); opacity: 1; } 100% { transform: scaleX(1); opacity: 0; } }
+    #app-boot .ab-cap { width: min(86vw, 460px); background: rgba(255,255,255,.025); border: 1px solid #2d323c; border-radius: 13px; padding: 16px 20px 18px; }
+    #app-boot .ab-meta { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; color: #6b7280; letter-spacing: .3px; display: flex; gap: 14px; margin-bottom: 12px; }
+    #app-boot .ab-meta .ab-num { color: #4f9dff; }
+    #app-boot .ab-meta .ab-lang { margin-left: auto; color: #4f9dff; }
+    #app-boot .ab-src { font-size: 16.5px; color: #9aa1ad; margin-bottom: 4px; }
+    #app-boot .ab-tgt { font-size: 16.5px; font-weight: 600; color: #e6e8ec; min-height: 1.5em; }
+    #app-boot .ab-caret { display: inline-block; width: 2px; height: 1.05em; vertical-align: -2px; margin-left: 1px; background: #4f9dff; animation: ab-blink 1s steps(1) infinite; }
+    #app-boot .ab-tick { color: #46c46a; font-weight: 700; opacity: 0; transition: opacity .2s; margin-left: 6px; }
+    #app-boot .ab-tick.on { opacity: 1; }
+    @keyframes ab-blink { 50% { opacity: 0; } }
 
-    #app-boot .ab-stuck { display: none; text-align: center; font-size: 13px; max-width: 280px; line-height: 1.6; }
+    #app-boot .ab-stuck { display: none; text-align: center; font-size: 13px; max-width: 300px; line-height: 1.6; }
     #app-boot .ab-stuck button { margin-top: 10px; font: inherit; font-weight: 600; cursor: pointer; background: #4f9dff; color: #0c1320; border: none; border-radius: 8px; padding: 8px 18px; }
-    @media (prefers-reduced-motion: reduce) {
-      #app-boot .ab-words span { animation: none; }
-      #app-boot .ab-words span:first-child { opacity: 1; }
-      #app-boot .ab-cue { animation: none; transform: scaleX(.4); }
-    }
+    @media (prefers-reduced-motion: reduce) { #app-boot .ab-caret { animation: none; opacity: 0; } }
+    /* Light theme — splash colours are inline (must work even if app.css fails to load). */
+    html[data-theme="light"].booting #app-boot { background: #e6e9ef; color: #5a6473; }
+    html[data-theme="light"] #app-boot .ab-brand { color: #1b1f27; }
+    html[data-theme="light"] #app-boot .ab-brand b,
+    html[data-theme="light"] #app-boot .ab-meta .ab-num,
+    html[data-theme="light"] #app-boot .ab-meta .ab-lang { color: #2f74e0; }
+    html[data-theme="light"] #app-boot .ab-cap { background: rgba(0,0,0,.035); border-color: #d2d8e1; }
+    html[data-theme="light"] #app-boot .ab-src { color: #5a6473; }
+    html[data-theme="light"] #app-boot .ab-tgt { color: #1b1f27; }
+    html[data-theme="light"] #app-boot .ab-caret { background: #2f74e0; }
+    html[data-theme="light"] #app-boot .ab-tick { color: #2e9e51; }
+    html[data-theme="light"] #app-boot .ab-stuck button { background: #2f74e0; color: #fff; }
   </style>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}?v={{ asset_ver }}">
   <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}?v={{ asset_ver }}">
@@ -100,52 +94,325 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ asset_ver }}">
 </head>
 <body>
-  <!-- Boot splash (shown by the watchdog in <head> only on a session's first load). -->
+  <!-- Boot splash (shown by the watchdog in <head> only on a session's first load).
+       Motif: a real SRT cue translating itself — the app's job, as a loader. -->
   <div id="app-boot" aria-hidden="true">
     <div class="ab-brand">transl<b>AI</b>tarr2</div>
-    <div class="ab-cap" role="status" aria-label="Loading">
-      <div class="ab-words">
-        <span>Loading…</span>
-        <span>Načítám…</span>
-        <span>Cargando…</span>
-        <span>読み込み中…</span>
-      </div>
-      <div class="ab-cue"></div>
+    <div class="ab-cap" role="status" aria-label="Translating subtitles">
+      <div class="ab-meta"><span class="ab-num" id="ab-num">1</span><span class="ab-tc" id="ab-tc">00:00:00,000 → 00:00:00,000</span><span class="ab-lang" id="ab-lang">ES → EN</span></div>
+      <div class="ab-src" id="ab-src">Creo que nos están siguiendo.</div>
+      <div class="ab-tgt"><span id="ab-tgt"></span><span class="ab-caret" id="ab-caret"></span><span class="ab-tick" id="ab-tick">✓</span></div>
     </div>
     <div class="ab-stuck">Couldn't reach the server — retrying…<br>
       <button type="button" onclick="try{sessionStorage.removeItem('t2_boot_retry')}catch(e){}; location.reload()">Try again</button>
     </div>
   </div>
+  <script>
+  (function () {
+    // Cue typing animation for the splash. Also re-shows the splash on internal
+    // navigation (clicking Library/Queue/Settings/What's New or a reloading form),
+    // so each page's render is bridged. Self-terminates when .booting is removed.
+    var PAIRS = [
+      { f: "ES", t: "EN", s: "Creo que nos están siguiendo.",   d: "I think we're being followed." },
+      { f: "EN", t: "DE", s: "We should leave before dawn.",    d: "Wir sollten vor Morgengrauen gehen." },
+      { f: "IT", t: "EN", s: "Non dovevi venire qui.",          d: "You shouldn't have come here." },
+      { f: "FR", t: "EN", s: "Reste où tu es.",                 d: "Stay where you are." },
+      { f: "EN", t: "ES", s: "They never found the car.",       d: "Nunca encontraron el coche." }
+    ];
+    var END = 2760, TYPE = 1800, HOLD = 1100;
+    var src = document.getElementById('ab-src'), lang = document.getElementById('ab-lang'), num = document.getElementById('ab-num'),
+        tgt = document.getElementById('ab-tgt'), tc = document.getElementById('ab-tc'),
+        caret = document.getElementById('ab-caret'), tick = document.getElementById('ab-tick');
+    function pad(n, l) { n = String(n); while (n.length < l) n = '0' + n; return n; }
+    function fmt(ms) { return '00:00:' + pad(Math.floor(ms / 1000), 2) + ',' + pad(Math.floor(ms) % 1000, 3); }
+    function booting() { return document.documentElement.classList.contains('booting'); }
+    function setPair(p) { if (src) src.textContent = p.s; if (lang) lang.textContent = p.f + ' → ' + p.t; }
+    var reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var last = -1, cue = 1, running = false;
+    function pick() { var j; do { j = Math.floor(Math.random() * PAIRS.length); } while (PAIRS.length > 1 && j === last); last = j; return PAIRS[j]; }
+    function staticCue() { var p = PAIRS[0]; setPair(p); if (tgt) tgt.textContent = p.d; if (tc) tc.textContent = '00:00:00,000 → ' + fmt(END); if (caret) caret.style.display = 'none'; if (tick) tick.classList.add('on'); }
+    function loop() {
+      if (!booting()) { running = false; return; }
+      var p = pick(), TG = p.d, start = null;
+      if (num) num.textContent = cue++;
+      setPair(p);
+      if (caret) caret.style.display = 'inline-block'; if (tick) tick.classList.remove('on'); if (tgt) tgt.textContent = '';
+      function step(now) {
+        if (!booting()) { running = false; return; }
+        if (start === null) start = now;
+        var t = Math.min((now - start) / TYPE, 1);
+        if (tgt) tgt.textContent = TG.slice(0, Math.floor(TG.length * t));
+        if (tc) tc.textContent = '00:00:00,000 → ' + fmt(END * t);
+        if (t < 1) { requestAnimationFrame(step); }
+        else { if (tgt) tgt.textContent = TG; if (tc) tc.textContent = '00:00:00,000 → ' + fmt(END);
+               if (caret) caret.style.display = 'none'; if (tick) tick.classList.add('on'); setTimeout(loop, HOLD); }
+      }
+      requestAnimationFrame(step);
+    }
+    function runCue() { if (running || !tgt) return; if (reduced) { staticCue(); return; } running = true; loop(); }
+    function showSplash() {
+      document.documentElement.classList.add('booting');
+      var b = document.getElementById('app-boot'); if (b) b.classList.remove('ab-hide');
+      running = false; runCue();
+    }
+
+    if (booting()) runCue();
+
+    // Internal link navigation → bridge with the splash.
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest ? e.target.closest('a[href]') : null;
+      if (!a || a.target === '_blank' || a.hasAttribute('download')) return;
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      var href = a.getAttribute('href') || '';
+      if (!href || href.charAt(0) === '#' || href.indexOf('javascript:') === 0) return;
+      var u; try { u = new URL(a.href, location.href); } catch (_) { return; }
+      if (u.origin !== location.origin) return;
+      if (u.pathname === location.pathname && u.search === location.search) return; // same page
+      showSplash();
+    }, true);
+
+    // Forms that reload the page (Rescan, Clear finished, Security, login) — but not
+    // the AJAX autosave form, which never navigates.
+    document.addEventListener('submit', function (e) {
+      var f = e.target;
+      if (f && f.matches && f.matches('[data-autosave]')) return;
+      showSplash();
+    }, true);
+  })();
+  </script>
+
+  {% macro themetoggle() %}
+  <div class="themetoggle" id="themeToggle">
+    <button type="button" data-set="light" title="Light theme" aria-label="Light theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg></button>
+    <button type="button" data-set="dark" title="Dark theme" aria-label="Dark theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12.8A8 8 0 1 1 11.2 3a6.5 6.5 0 0 0 9.8 9.8z"/></svg></button>
+  </div>
+  {% endmacro %}
 
   {% if show_nav|default(true) %}
-  <header class="topbar">
-    <a class="brand" href="{{ url_for('library') }}">transl<span class="accent">AI</span>tarr2</a>
-    <nav class="tabs">
-      <a href="{{ url_for('library') }}" class="{{ 'active' if active=='library' }}">Library</a>
-      <a href="{{ url_for('queue') }}" class="{{ 'active' if active=='queue' }}">Queue</a>
-      <a href="{{ url_for('settings') }}" class="{{ 'active' if active=='settings' }}">Settings</a>
-      <a href="{{ url_for('whats_new') }}" class="{{ 'active' if active=='whatsnew' }}">What's New</a>
-    </nav>
-  </header>
-  {% endif %}
+  <div class="app">
+    <aside class="side">
+      <a class="logo" href="{{ url_for('library') }}"><span class="mark">AI</span><span class="wm">transl<b>AI</b>tarr2</span></a>
+      <div class="navlabel">Workspace</div>
+      <a class="nav {{ 'active' if active=='library' }}" href="{{ url_for('library') }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M7 20h10M7 9h7M7 13h4"/></svg>Library</a>
+      <a class="nav {{ 'active' if active=='queue' }}" href="{{ url_for('queue') }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h16M4 17h10"/></svg>Queue</a>
+      <a class="nav {{ 'active' if active=='settings' }}" href="{{ url_for('settings') }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a7 7 0 0 0-1.7 1l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.3 2.6h4l.3-2.6a7 7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.5a7 7 0 0 0 .1-1z"/></svg>Settings</a>
+      <a class="nav {{ 'active' if active=='whatsnew' }}" href="{{ url_for('whats_new') }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z"/></svg>What's New</a>
+      <div class="sidefoot">
+        {{ themetoggle() }}
+        <div class="ver">v{{ version.current }} · GPL-3.0</div>
+      </div>
+    </aside>
 
-  {% if version.update_available %}
-  <div class="update-banner">
-    A new version is available: <strong>{{ version.latest }}</strong> (you have {{ version.current }}).
-    <a href="{{ version.url }}" target="_blank" rel="noopener">View changelog →</a>
-  </div>
-  {% endif %}
-
+    <main class="main">
+      {% if version.update_available %}
+      <div class="update-banner">
+        A new version is available: <strong>{{ version.latest }}</strong> (you have {{ version.current }}).
+        <a href="{{ version.url }}" target="_blank" rel="noopener">View changelog →</a>
+      </div>
+      {% endif %}
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}<div class="wrap" style="padding-bottom:0"><div class="flash">{% for m in messages %}<div>{{ m }}</div>{% endfor %}</div></div>{% endif %}
+      {% endwith %}
+  {% else %}
   <main class="content">
     {% with messages = get_flashed_messages() %}
-      {% if messages %}
-        <div class="flash">{% for m in messages %}<div>{{ m }}</div>{% endfor %}</div>
-      {% endif %}
+      {% if messages %}<div class="flash">{% for m in messages %}<div>{{ m }}</div>{% endfor %}</div>{% endif %}
     {% endwith %}
-    {% block content %}{% endblock %}
-  </main>
+  {% endif %}
 
-  <footer class="foot">translAItarr2 v{{ version.current }} · GPL-3.0</footer>
+  {% block content %}{% endblock %}
+
+  {% if show_nav|default(true) %}
+    </main>
+  </div>
+  {% else %}
+  </main>
+  {% endif %}
+
+  <!-- Provider-choice modal for Translate / Re-translate / Translate all -->
+  <div class="overlay" id="tr-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="tr-act">
+      <h3 id="tr-act">Translate</h3>
+      <div class="mt" id="tr-title"></div>
+      <p class="ml">Provider</p>
+      <div id="tr-opts">
+        <div class="opt on" data-val=""><span class="dot"></span><div><div class="nm">Default provider</div><div class="sub2">Use the priority slots from Settings</div></div></div>
+        {% for v, l in (providers|default([])) %}
+        <div class="opt" data-val="{{ v }}"><span class="dot"></span><div><div class="nm">{{ l }}</div></div></div>
+        {% endfor %}
+      </div>
+      <div class="note" id="tr-note">Source is auto-detected.</div>
+      <div class="foot"><button type="button" class="btn" id="tr-cancel">Cancel</button><button type="button" class="btn primary" id="tr-go">Translate</button></div>
+    </div>
+  </div>
+
+  <div id="toast-wrap"></div>
+
+  <script>
+    var QUEUE_URL = "{{ url_for('queue') }}";
+
+    /* Toast / snackbar — bottom centre. With an action link it lingers longer so
+       you can click through (e.g. straight to the Queue). */
+    function toast(message, kind, opts) {
+      opts = opts || {};
+      var wrap = document.getElementById('toast-wrap');
+      if (!wrap) return;
+      var el = document.createElement('div');
+      el.className = 'toast' + (kind ? ' ' + kind : '');
+      var dot = document.createElement('span'); dot.className = 'ti'; el.appendChild(dot);
+      var txt = document.createElement('span'); txt.style.flex = '1'; txt.textContent = message; el.appendChild(txt);
+      if (opts.actionText && opts.actionHref) {
+        var a = document.createElement('a'); a.href = opts.actionHref; a.textContent = opts.actionText; el.appendChild(a);
+      }
+      var x = document.createElement('button'); x.className = 'x'; x.type = 'button'; x.innerHTML = '&times;';
+      x.setAttribute('aria-label', 'Dismiss');
+      el.appendChild(x);
+      wrap.appendChild(el);
+      requestAnimationFrame(function () { el.classList.add('show'); });
+      var ttl = opts.timeout || (opts.actionHref ? 9000 : 4200);
+      var timer = setTimeout(remove, ttl);
+      function remove() { clearTimeout(timer); el.classList.remove('show'); setTimeout(function () { if (el.parentNode) el.remove(); }, 250); }
+      x.addEventListener('click', remove);
+      return el;
+    }
+
+    /* Theme toggle — dark is the default; choice persists in a cookie (so the
+       server renders the right theme with no flash) and localStorage. */
+    (function () {
+      function mark(t) { document.querySelectorAll('#themeToggle button').forEach(function (b) { b.classList.toggle('on', b.dataset.set === t); }); }
+      function setTheme(t) {
+        document.documentElement.setAttribute('data-theme', t);
+        try { localStorage.setItem('t2_theme', t); } catch (e) {}
+        document.cookie = 't2_theme=' + t + ';path=/;max-age=31536000;samesite=lax';
+        mark(t);
+      }
+      mark(document.documentElement.getAttribute('data-theme') || 'dark');
+      document.querySelectorAll('#themeToggle button').forEach(function (b) {
+        b.addEventListener('click', function () { setTheme(b.dataset.set); });
+      });
+    })();
+
+    /* Translate modal + direct Verify — wired to the real endpoints (AJAX), with
+       a success toast that links to the Queue. */
+    (function () {
+      var overlay = document.getElementById('tr-overlay');
+      var actEl = document.getElementById('tr-act'), titleEl = document.getElementById('tr-title'),
+          goEl = document.getElementById('tr-go'), cancelEl = document.getElementById('tr-cancel');
+      var pending = null;
+
+      function selectedProvider() { var o = document.querySelector('#tr-opts .opt.on'); return o ? o.dataset.val : ''; }
+      function open(cfg) {
+        pending = cfg;
+        actEl.textContent = cfg.act;
+        titleEl.textContent = cfg.subtitle || '';
+        goEl.textContent = cfg.act === 'Translate all missing' ? 'Translate all' : cfg.act;
+        overlay.classList.add('on');
+      }
+      function close() { overlay.classList.remove('on'); }
+
+      document.querySelectorAll('#tr-opts .opt').forEach(function (o) {
+        o.addEventListener('click', function () {
+          document.querySelectorAll('#tr-opts .opt').forEach(function (x) { x.classList.remove('on'); });
+          o.classList.add('on');
+        });
+      });
+      cancelEl.addEventListener('click', close);
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+
+      function postAction(url, data, okMsg) {
+        var body = new URLSearchParams(data);
+        return fetch(url, { method: 'POST', headers: { 'X-Requested-With': 'fetch', 'Content-Type': 'application/x-www-form-urlencoded' }, body: body })
+          .then(function (r) { return r.json().catch(function () { return { ok: r.ok }; }); })
+          .then(function (d) {
+            if (d && d.ok) { toast(d.message || okMsg, 'ok', { actionText: 'Open Queue', actionHref: QUEUE_URL }); }
+            else { toast((d && d.message) || 'Something went wrong.', 'err'); }
+            return d;
+          })
+          .catch(function () { toast('Could not reach the server.', 'err'); });
+      }
+
+      // Open the modal for translate / re-translate / translate-all
+      document.querySelectorAll('[data-modal]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          open({
+            act: btn.dataset.act || 'Translate',
+            url: btn.dataset.url,
+            subtitle: btn.dataset.subtitle || btn.dataset.title || '',
+            path: btn.dataset.path || '', title: btn.dataset.title || '', force: btn.dataset.force || ''
+          });
+        });
+      });
+      goEl.addEventListener('click', function () {
+        if (!pending) return;
+        var url = pending.url, prov = selectedProvider();
+        close();
+        if (pending.items && pending.items.length) {            // bulk: many titles, one provider
+          var body = new URLSearchParams();
+          body.set('provider', prov);
+          if (pending.force) body.set('force', pending.force);
+          pending.items.forEach(function (it) { body.append('paths', it.path); body.append('titles', it.title || ''); });
+          fetch(url, { method: 'POST', headers: { 'X-Requested-With': 'fetch', 'Content-Type': 'application/x-www-form-urlencoded' }, body: body })
+            .then(function (r) { return r.json().catch(function () { return { ok: r.ok }; }); })
+            .then(function (d) {
+              if (d && d.ok) { toast(d.message || 'Added to the queue.', 'ok', { actionText: 'Open Queue', actionHref: QUEUE_URL }); if (pending.onDone) pending.onDone(); }
+              else { toast((d && d.message) || 'Something went wrong.', 'err'); }
+            })
+            .catch(function () { toast('Could not reach the server.', 'err'); });
+          return;
+        }
+        var data = { provider: prov };
+        if (pending.path) data.path = pending.path;
+        if (pending.title) data.title = pending.title;
+        if (pending.force) data.force = pending.force;
+        postAction(url, data, 'Added to the queue.');
+      });
+
+      // Expose for bulk callers (Library): open the same modal with a list of paths.
+      window.t2OpenTranslateModal = open;
+
+      // Direct (no-modal) actions: Verify
+      document.querySelectorAll('[data-verify]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          btn.disabled = true;
+          postAction(btn.dataset.url, { path: btn.dataset.path || '', title: btn.dataset.title || '' }, 'Queued for verification.')
+            .then(function () { btn.disabled = false; });
+        });
+      });
+
+      // Expose the generic AJAX poster for bulk verify.
+      window.t2PostAction = postAction;
+    })();
+  </script>
+  <script>
+    /* Keyboard shortcuts: "/" focuses the page search; "g" then l/q/s/n navigates.
+       Ignored while typing in an input/textarea/select or with modifier keys. */
+    (function () {
+      var NAV = { l: "{{ url_for('library') }}", q: "{{ url_for('queue') }}",
+                  s: "{{ url_for('settings') }}", n: "{{ url_for('whats_new') }}" };
+      var gPending = false, gTimer = null;
+      function typing(el) { return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable); }
+      document.addEventListener('keydown', function (e) {
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+        if (typing(e.target)) { if (e.key === 'Escape') e.target.blur(); return; }
+        if (e.key === '/') {
+          var s = document.getElementById('lib-search') || document.querySelector('input[type="text"], input[type="search"]');
+          if (s) { e.preventDefault(); s.focus(); }
+          return;
+        }
+        if (gPending) {
+          gPending = false; clearTimeout(gTimer);
+          var dest = NAV[e.key.toLowerCase()];
+          if (dest) { e.preventDefault(); location.href = dest; }
+          return;
+        }
+        if (e.key === 'g') { gPending = true; gTimer = setTimeout(function () { gPending = false; }, 1200); }
+      });
+    })();
+  </script>
   <script src="{{ url_for('static', filename='js/config.js') }}?v={{ asset_ver }}"></script>
 </body>
 </html>

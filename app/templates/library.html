@@ -1,102 +1,123 @@
 {% extends "base.html" %}
 {% block title %}Library · translAItarr2{% endblock %}
 
-{% macro lib_table(items) %}
-<div class="card" style="padding:0">
-  <table>
-    <thead><tr><th>Title</th><th>Status</th><th style="width:200px"></th></tr></thead>
-    <tbody>
-      {% for t in items %}
-      <tr data-title="{{ t.title|lower }}" data-chip="{{ t.chip }}">
-        <td>{{ t.title }}</td>
-        <td><span class="chip {{ t.chip }}">{{ t.status }}</span></td>
-        <td class="actions">
-          {% if t.translatable %}
-          <form method="post" action="{{ url_for('translate') }}" style="display:inline">
-            <input type="hidden" name="path" value="{{ t.local_path }}">
-            <input type="hidden" name="title" value="{{ t.title }}">
-            <button class="small" type="submit">Translate</button></form>
-          {% elif t.reason in ['sidecar', 'embedded'] %}
-          <form method="post" action="{{ url_for('translate') }}" style="display:inline">
-            <input type="hidden" name="path" value="{{ t.local_path }}">
-            <input type="hidden" name="title" value="{{ t.title }}">
-            <input type="hidden" name="force" value="1">
-            <button class="small" type="submit" title="Translate again from source">Re-translate</button></form>
-          {% endif %}
-          {% if t.reason == 'sidecar' %}
-          <form method="post" action="{{ url_for('verify') }}" style="display:inline">
-            <input type="hidden" name="path" value="{{ t.local_path }}">
-            <input type="hidden" name="title" value="{{ t.title }}">
-            <button class="small" type="submit" title="Back-translation check">Verify</button></form>
-          {% endif %}
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="3" class="empty">Nothing here yet.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+{% macro lib_list(items) %}
+<div class="list">
+  {% for t in items %}
+  <div class="item {{ t.chip }}" data-title="{{ t.title|lower }}" data-chip="{{ t.chip }}">
+    <div class="pick"><input type="checkbox" class="lib-pick" data-path="{{ t.local_path }}" data-name="{{ t.title }}"></div>
+    <div class="rail"></div>
+    <div class="body">
+      <div class="title">{{ t.title }}</div>
+      {% if t.reason %}<div class="meta">{{ t.reason }}</div>{% endif %}
+    </div>
+    <div class="status"><span class="chip {{ t.chip }}">{{ t.status }}</span></div>
+    <div class="acts">
+      {% if t.translatable %}
+      <button class="btn small" type="button" data-modal data-act="Translate"
+              data-url="{{ url_for('translate') }}" data-path="{{ t.local_path }}" data-title="{{ t.title }}" data-subtitle="{{ t.title }}">Translate</button>
+      {% elif t.reason in ['sidecar', 'embedded'] %}
+      <button class="btn small" type="button" data-modal data-act="Re-translate" title="Translate again from source"
+              data-url="{{ url_for('translate') }}" data-path="{{ t.local_path }}" data-title="{{ t.title }}" data-subtitle="{{ t.title }}" data-force="1">Re-translate</button>
+      {% endif %}
+      {% if t.reason == 'sidecar' %}
+      <button class="btn small" type="button" data-verify title="Back-translation check"
+              data-url="{{ url_for('verify') }}" data-path="{{ t.local_path }}" data-title="{{ t.title }}">Verify</button>
+      {% endif %}
+    </div>
+  </div>
+  {% else %}
+  <div class="empty">Nothing here yet.</div>
+  {% endfor %}
 </div>
 {% endmacro %}
 
 {% block content %}
-<h1>Library</h1>
-<p class="sub">Downloaded titles from Sonarr &amp; Radarr and their subtitle status.</p>
-
-<div class="toolbar">
-  <input type="text" id="lib-search" placeholder="Search title…" style="max-width:240px">
-  <select id="lib-filter">
-    <option value="">All statuses</option>
-    <option value="amber">Needs translation</option>
-    <option value="green">Has target language</option>
-    <option value="blue">Translated</option>
-    <option value="red">No source</option>
-    <option value="gray">Other</option>
-  </select>
-  <span class="spacer"></span>
-  {% if providers %}
-  <select id="lib-provider" title="Which provider to translate with (overrides the priority slots for jobs you queue here)">
-    <option value="">Default provider</option>
-    {% for v, l in providers %}<option value="{{ v }}">{{ l }}</option>{% endfor %}
-  </select>
-  {% endif %}
+<div class="topline">
+  <div><div class="eyebrow">Sonarr · Radarr</div><h1>Library</h1></div>
+  <div class="grow"></div>
   <form method="post" action="{{ url_for('rescan') }}" style="display:inline"><button class="btn" type="submit">Rescan</button></form>
-  <form method="post" action="{{ url_for('translate_all') }}" style="display:inline"><button class="btn primary" type="submit">Translate all missing</button></form>
+  <button class="btn primary" type="button" data-modal data-act="Translate all missing"
+          data-url="{{ url_for('translate_all') }}" data-subtitle="All titles missing the target language">Translate all missing</button>
 </div>
 
-<h2 class="sec">Movies <span class="hint">({{ movies|length }})</span></h2>
-{{ lib_table(movies) }}
+<div class="wrap">
+  <div class="toolbar">
+    <input type="text" id="lib-search" placeholder="Search title…" style="max-width:260px">
+    <select id="lib-filter" style="max-width:200px">
+      <option value="">All statuses</option>
+      <option value="amber">Needs translation</option>
+      <option value="green">Has target language</option>
+      <option value="blue">Translated</option>
+      <option value="red">No source</option>
+      <option value="gray">Other</option>
+    </select>
+  </div>
 
-<h2 class="sec">TV Shows <span class="hint">({{ episodes|length }})</span></h2>
-{{ lib_table(episodes) }}
+  <div class="bulkbar" id="bulkbar">
+    <span class="n"><span id="bulk-count">0</span> selected</span>
+    <span class="grow"></span>
+    <button class="btn small" type="button" id="bulk-translate" data-url="{{ url_for('bulk_translate') }}">Translate selected</button>
+    <button class="btn small" type="button" id="bulk-verify" data-url="{{ url_for('bulk_verify') }}">Verify selected</button>
+    <button class="btn small" type="button" id="bulk-clear">Clear</button>
+  </div>
+
+  <div class="group-h"><span class="t">Movies</span><span class="n">{{ movies|length }}</span></div>
+  {{ lib_list(movies) }}
+
+  <div class="group-h"><span class="t">TV Shows</span><span class="n">{{ episodes|length }}</span></div>
+  {{ lib_list(episodes) }}
+</div>
 
 <script>
 (function () {
-  const q = document.getElementById("lib-search");
-  const f = document.getElementById("lib-filter");
+  var q = document.getElementById("lib-search");
+  var f = document.getElementById("lib-filter");
   function apply() {
-    const s = q.value.trim().toLowerCase(), c = f.value;
-    document.querySelectorAll("tbody tr[data-title]").forEach((tr) => {
-      const okS = !s || tr.dataset.title.includes(s);
-      const okC = !c || tr.dataset.chip === c;
-      tr.style.display = (okS && okC) ? "" : "none";
+    var s = q.value.trim().toLowerCase(), c = f.value;
+    document.querySelectorAll(".item[data-title]").forEach(function (it) {
+      var okS = !s || it.dataset.title.indexOf(s) !== -1;
+      var okC = !c || it.dataset.chip === c;
+      it.style.display = (okS && okC) ? "" : "none";
     });
   }
   q.addEventListener("input", apply);
   f.addEventListener("change", apply);
 
-  // Per-job provider: inject the chosen provider into any translate form on submit.
-  const prov = document.getElementById("lib-provider");
-  if (prov) {
-    document.addEventListener("submit", (e) => {
-      const form = e.target;
-      const act = form.getAttribute("action") || "";
-      if (!act.includes("translate") || !prov.value) return;  // translate / translate-all / re-translate
-      let h = form.querySelector('input[name="provider"]');
-      if (!h) { h = document.createElement("input"); h.type = "hidden"; h.name = "provider"; form.appendChild(h); }
-      h.value = prov.value;
-    }, true);
+  // ── Bulk selection ─────────────────────────────────────────────────────────
+  var bar = document.getElementById("bulkbar");
+  var countEl = document.getElementById("bulk-count");
+  function picks() { return [...document.querySelectorAll(".lib-pick:checked")]; }
+  function refresh() {
+    var n = picks().length;
+    countEl.textContent = n;
+    bar.classList.toggle("on", n > 0);
   }
+  document.addEventListener("change", function (e) {
+    if (e.target.classList && e.target.classList.contains("lib-pick")) refresh();
+  });
+  document.getElementById("bulk-clear").addEventListener("click", function () {
+    picks().forEach(function (c) { c.checked = false; });
+    refresh();
+  });
+  function selectedItems() { return picks().map(function (c) { return { path: c.dataset.path, title: c.dataset.name }; }); }
+  function clearAfter() { return function () { document.querySelectorAll(".lib-pick:checked").forEach(function (c) { c.checked = false; }); refresh(); }; }
+
+  document.getElementById("bulk-translate").addEventListener("click", function () {
+    var items = selectedItems();
+    if (!items.length || typeof window.t2OpenTranslateModal !== "function") return;
+    window.t2OpenTranslateModal({
+      act: "Translate selected", url: this.dataset.url,
+      subtitle: items.length + " title(s) selected", items: items, onDone: clearAfter()
+    });
+  });
+  document.getElementById("bulk-verify").addEventListener("click", function () {
+    var items = selectedItems();
+    if (!items.length || typeof window.t2PostAction !== "function") return;
+    var body = new URLSearchParams();
+    items.forEach(function (it) { body.append("paths", it.path); body.append("titles", it.title || ""); });
+    window.t2PostAction(this.dataset.url, body, "Queued for verification.").then(clearAfter());
+  });
 })();
 </script>
 {% endblock %}

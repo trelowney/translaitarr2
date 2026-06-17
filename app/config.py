@@ -118,11 +118,21 @@ DEFAULTS = {
     "azure": {"api_key": "", "region": ""},
     # Yandex Translate — API key + the cloud folder id.
     "yandex": {"api_key": "", "folder_id": ""},
+    # MyMemory — free, keyless MT. Optional email raises the daily quota.
+    "mymemory": {"email": ""},
     # Cloudflare m2m100 reuses the credentials from the "cloudflare" block above
     # (no separate config) — it's the same account, just the translation model.
     # AI provider priority: primary first, then secondary, then tertiary (each a
     # provider name or "none"). Cross-provider fallback.
     "ai": {"primary": "gemini", "secondary": "none", "tertiary": "none"},
+    # Which providers you actually use. Controls both the per-job picker
+    # (Library Translate/Re-translate) and whether the provider's config card shows
+    # in Settings. Missing entry = enabled, so existing setups are unchanged.
+    "provider_enabled": {},
+    # Optional self-throttle for rate-limited engines: provider -> milliseconds to
+    # wait between requests. Missing/0 = no delay (unlimited, the default), so nothing
+    # slows down unless you opt in.
+    "provider_throttle": {},
     "languages": {
         "source_priority": ["eng", "fra", "deu", "spa"],
         "target": {"name": "Czech", "code": "cs"},
@@ -258,6 +268,12 @@ def load_config():
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE) as f:
             cfg = _deep_merge(cfg, json.load(f))
+    # Per-LLM-provider custom prompt + glossary, and the global formality setting
+    # (added later; ensure present for older config files). MT engines have no prompt.
+    for p in ("gemini", "openrouter", "openai_compat", "anthropic", "cloudflare"):
+        cfg.setdefault(p, {}).setdefault("prompt", "")
+        cfg[p].setdefault("glossary", "")
+    cfg.setdefault("translation", {}).setdefault("formality", "auto")
     # Environment / secrets override the file.
     for name, path in ENV_OVERRIDES.items():
         val = _env_value(name)

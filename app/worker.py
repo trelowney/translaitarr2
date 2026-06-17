@@ -20,6 +20,53 @@ log = logging.getLogger("translaitarr2")
 _started = False
 
 
+class _JobLogCapture(logging.Handler):
+    """Collects log lines emitted while a single job runs, so the Queue can show a
+    per-job log. The worker is serial (one job at a time), so a single buffer is safe.
+    Only captures while `active` (between start() and stop()), so idle web/automation
+    logging never accumulates in the buffer."""
+    def __init__(self):
+        super().__init__()
+        self.lines = []
+        self.active = False
+        self.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+
+    def start(self):
+        self.lines = []
+        self.active = True
+
+    def stop(self):
+        self.active = False
+
+    def emit(self, record):
+        if not self.active:
+            return
+        try:
+            self.lines.append(self.format(record))
+            if len(self.lines) > 2000:        # hard cap: never let one job's log grow unbounded
+                self.lines = self.lines[-2000:]
+        except Exception:  # noqa: BLE001 - logging must never break the worker
+            pass
+
+    def text(self):
+        # Newest first, to match the shared live log (Queue shows newest on top).
+        return "\n".join(reversed(self.lines))
+
+
+_job_log = _JobLogCapture()
+log.addHandler(_job_log)
+
+# Id of the job currently running (for live per-job log in the Queue), or None.
+_active_job = {"id": None}
+
+
+def live_job_log():
+    """The running job's id + its log so far, for live streaming in the Queue.
+    Returns (None, '') when nothing is running."""
+    jid = _active_job["id"]
+    return (jid, _job_log.text()) if jid is not None else (None, "")
+
+
 def _verify_label(r):
     if r.get("ok"):
         return f"verify ✓ ({r.get('checked', 0)} cues)"
@@ -76,6 +123,8 @@ def _loop():
             time.sleep(secs)
             continue
 
+        _job_log.start()
+        _active_job["id"] = job_id
         log.info("Job %s: starting [%s] — %s", job_id, action, title or path)
         db.set_status(job_id, "processing")
         try:
@@ -110,12 +159,17 @@ def _loop():
         except translator.AllModelsExhaustedError as e:
             log.warning("Job %s: %s — requeuing, sleeping until reset", job_id, e)
             db.set_status(job_id, "pending")
+            _active_job["id"] = None
+            _job_log.stop()
             time.sleep(db.seconds_until_reset(cfg["automation"].get("rpd_reset_tz", "UTC")))
             continue
         except Exception as e:  # noqa: BLE001 - any failure must not kill the worker
             log.error("Job %s FAILED: %s", job_id, e)
             db.set_status(job_id, "error", error=str(e))
 
+        db.set_job_log(job_id, _job_log.text())
+        _active_job["id"] = None
+        _job_log.stop()
         db.prune_jobs(20)
         time.sleep(3)
 

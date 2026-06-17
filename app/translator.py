@@ -357,6 +357,13 @@ def _deepl_translate(texts, target_code, source_name, cfg):
     src = DEEPL_SOURCE.get((source_name or "").lower())
     if src:
         body["source_lang"] = src
+    # Global formality (vykání/tykání). 'prefer_*' is ignored by DeepL for languages
+    # that don't support formality, so it never errors.
+    _f = (cfg.get("translation") or {}).get("formality", "auto")
+    if _f == "formal":
+        body["formality"] = "prefer_more"
+    elif _f == "informal":
+        body["formality"] = "prefer_less"
     try:
         r = requests.post(f"{_deepl_base(key)}/v2/translate", json=body,
                           timeout=cfg["translation"].get("api_timeout", 1200),
@@ -521,6 +528,7 @@ def _cf_m2m100_translate(texts, target_code, source_name, cfg):
         if r.status_code != 200:
             raise GeminiError(str(r.status_code), _http_err(r))
         out.append(r.json().get("result", {}).get("translated_text", ""))
+        _throttle("cf_m2m100", cfg)
     return out
 
 
@@ -540,6 +548,50 @@ def _gtranslate_free(texts, target_code, source_name, cfg):
             raise GeminiError(str(r.status_code), _http_err(r))
         seg = r.json()[0] or []
         out.append("".join(s[0] for s in seg if s and s[0]))
+        _throttle("gtranslate_free", cfg)
+    return out
+
+
+def _throttle(provider, cfg):
+    """Optional self-throttle for rate-limited engines. Sleeps the configured
+    milliseconds between requests; 0/missing = no delay (the default)."""
+    ms = (cfg.get("provider_throttle") or {}).get(provider, 0)
+    try:
+        ms = int(ms)
+    except (TypeError, ValueError):
+        ms = 0
+    if ms > 0:
+        time.sleep(ms / 1000.0)
+
+
+def _mymemory_translate(texts, target_code, source_name, cfg):
+    """MyMemory — free, keyless translation API with broad language coverage
+    (optional email raises the daily quota). One request per cue; modest quality —
+    a no-signup option alongside Google-free."""
+    src = _mt_lang(source_name) or "en"
+    email = (cfg.get("mymemory", {}).get("email") or "").strip()
+    out = []
+    for t in texts:
+        if not t.strip():
+            out.append(t)
+            continue
+        params = {"q": t, "langpair": f"{src}|{target_code}"}
+        if email:
+            params["de"] = email
+        try:
+            r = requests.get("https://api.mymemory.translated.net/get", params=params,
+                             timeout=cfg["translation"].get("api_timeout", 1200))
+        except requests.RequestException as e:
+            raise GeminiError("000", f"network error: {e}") from e
+        if r.status_code != 200:
+            raise GeminiError(str(r.status_code), _http_err(r))
+        d = r.json()
+        txt = (d.get("responseData") or {}).get("translatedText", "") or ""
+        if str(d.get("responseStatus")) != "200" or txt.upper().startswith(
+                ("MYMEMORY WARNING", "PLEASE SELECT", "INVALID")):
+            raise GeminiError("429", (txt[:200] or "MyMemory quota/request error"))
+        out.append(txt)
+        _throttle("mymemory", cfg)
     return out
 
 
@@ -552,6 +604,7 @@ _MT_ENGINES = {
     "yandex": (50, _yandex_translate),
     "cf_m2m100": (50, _cf_m2m100_translate),
     "gtranslate_free": (20, _gtranslate_free),
+    "mymemory": (20, _mymemory_translate),
 }
 
 
@@ -581,24 +634,72 @@ def mt_translate_chunk(provider, srt_path, src_lang, tgt_lang, cfg):
     return "\n".join(parts), "stop"
 
 
-def _translation_prompt(srt_content, src_lang, tgt_lang):
-    return (
-        f"Translate subtitles from {src_lang} to {tgt_lang}.\n"
-        "Use natural, conversational language as spoken in movies and TV shows.\n"
-        "Preserve character personality, emotions, and informal speech.\n"
-        "Adapt idioms and slang naturally for the target language.\n"
-        "Use informal address between characters by default; switch to formal only "
-        "when clearly required by social context, hierarchy, or narrative intent.\n\n"
-        "CRITICAL FORMATTING RULES - never violate:\n"
-        "- Return ONLY raw SRT. No explanation, no markdown, no code fences.\n"
-        "- NEVER skip, merge, split or reorder any subtitle entry.\n"
-        "- Keep every NUMBER line unchanged.\n"
-        "- Keep every TIMECODE line unchanged, character for character.\n"
-        "- Keep every blank separator line unchanged.\n"
-        "- Translate ONLY the text/dialogue lines.\n"
-        "- Output must have EXACTLY the same number of entries as input.\n\n"
-        f"SRT to translate:\n\n{srt_content}"
-    )
+# Editable per-LLM-provider style/instruction template (Settings → each provider).
+# Variables {source_language} {target_language} {formality} {glossary} are filled in
+# at translation time. The CRITICAL FORMATTING RULES below are always appended and
+# are NOT user-editable, so a custom prompt can never corrupt the SRT structure.
+DEFAULT_LLM_PROMPT = (
+    "Translate subtitles from {source_language} to {target_language}.\n"
+    "Use natural, conversational language as spoken in movies and TV shows.\n"
+    "Preserve character personality, emotions, and informal speech.\n"
+    "Adapt idioms and slang naturally for the target language.\n"
+    "{formality}\n"
+    "{glossary}"
+)
+_LOCKED_RULES = (
+    "\n\nCRITICAL FORMATTING RULES - never violate:\n"
+    "- Return ONLY raw SRT. No explanation, no markdown, no code fences.\n"
+    "- NEVER skip, merge, split or reorder any subtitle entry.\n"
+    "- Keep every NUMBER line unchanged.\n"
+    "- Keep every TIMECODE line unchanged, character for character.\n"
+    "- Keep every blank separator line unchanged.\n"
+    "- Translate ONLY the text/dialogue lines.\n"
+    "- Output must have EXACTLY the same number of entries as input.\n\n"
+)
+_FORMALITY_LLM = {
+    "auto": ("Use informal address between characters by default; switch to formal only "
+             "when clearly required by social context, hierarchy, or narrative intent."),
+    "formal": "Use formal, polite address (e.g. Czech vykání) consistently throughout.",
+    "informal": "Use informal, familiar address (e.g. Czech tykání) consistently throughout.",
+}
+
+
+def _render_glossary(text):
+    """Turn a 'term = translation' (one per line; '=', '->' or '=>' accepted) block
+    into a single instruction line, or '' if empty."""
+    pairs = []
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        sep = next((s for s in ("=>", "->", "=") if s in line), None)
+        if not sep:
+            continue
+        a, b = (x.strip() for x in line.split(sep, 1))
+        if a and b:
+            pairs.append(f"{a} → {b}")
+    if not pairs:
+        return ""
+    return "Always use these exact, consistent translations for these terms: " + "; ".join(pairs) + "."
+
+
+def _translation_prompt(srt_content, src_lang, tgt_lang, cfg=None, provider=""):
+    cfg = cfg or {}
+    pcfg = cfg.get(provider) or {}
+    tmpl = (pcfg.get("prompt") or "").strip() or DEFAULT_LLM_PROMPT
+    formality = (cfg.get("translation") or {}).get("formality", "auto")
+    repl = {
+        "{source_language}": src_lang,
+        "{target_language}": tgt_lang,
+        "{formality}": _FORMALITY_LLM.get(formality, _FORMALITY_LLM["auto"]),
+        "{glossary}": _render_glossary(pcfg.get("glossary")),
+    }
+    body = tmpl
+    for k, v in repl.items():
+        body = body.replace(k, v)
+    # Drop blank lines a removed {glossary}/{formality} may have left, then lock + SRT.
+    body = "\n".join(ln for ln in body.splitlines() if ln.strip() != "").rstrip()
+    return body + _LOCKED_RULES + f"SRT to translate:\n\n{srt_content}"
 
 
 def _complete(provider, model, prompt, cfg, max_tokens=None):
@@ -705,7 +806,7 @@ def call_model_once(provider, model, srt_path, src_lang, tgt_lang, cfg):
     """Translate one SRT chunk with provider+model. Returns (clean_srt, finish)."""
     with open(srt_path, encoding="utf-8") as f:
         srt_content = f.read()
-    prompt = _translation_prompt(srt_content, src_lang, tgt_lang)
+    prompt = _translation_prompt(srt_content, src_lang, tgt_lang, cfg, provider)
     log.info("%s -> %s: %s entries", provider, model, count_entries(srt_path))
     t0 = time.time()
     text, finish = _complete(provider, model, prompt, cfg)
@@ -723,18 +824,18 @@ def call_model_once(provider, model, srt_path, src_lang, tgt_lang, cfg):
 
 PROVIDERS = ("gemini", "openrouter", "openai_compat", "anthropic", "cloudflare",
              "deepl", "libretranslate", "google", "azure", "yandex",
-             "cf_m2m100", "gtranslate_free")
+             "cf_m2m100", "gtranslate_free", "mymemory")
 # Dedicated machine-translation engines (not LLMs): translate text segments, no
 # prompt/model list. Routed through mt_translate_chunk instead of _complete.
 MT_PROVIDERS = ("deepl", "libretranslate", "google", "azure", "yandex",
-                "cf_m2m100", "gtranslate_free")
+                "cf_m2m100", "gtranslate_free", "mymemory")
 RETRIABLE = ("500", "502", "503", "504", "429", "000", "401", "402")
 
 
 def provider_configured(cfg, p):
     """True if provider p has enough credentials/config to actually translate."""
     g = cfg.get(p, {})
-    if p == "gtranslate_free":
+    if p in ("gtranslate_free", "mymemory"):
         return True
     if p == "cf_m2m100":
         return bool(cfg["cloudflare"].get("account_id") and cfg["cloudflare"].get("api_key"))
@@ -750,9 +851,15 @@ def provider_configured(cfg, p):
     return bool(g.get("api_key") and g.get("models"))
 
 
+def provider_is_enabled(cfg, p):
+    """Whether provider p is offered in the per-job picker / shown in Settings.
+    Missing entry defaults to True, so unconfigured/older setups are unchanged."""
+    return cfg.get("provider_enabled", {}).get(p, True)
+
+
 def configured_providers(cfg):
-    """Providers that are ready to translate (for the per-job picker)."""
-    return [p for p in PROVIDERS if provider_configured(cfg, p)]
+    """Providers ready to translate AND enabled (for the per-job picker)."""
+    return [p for p in PROVIDERS if provider_configured(cfg, p) and provider_is_enabled(cfg, p)]
 
 
 def provider_chain(cfg):
@@ -767,7 +874,7 @@ def provider_chain(cfg):
         if p in MT_PROVIDERS:  # MT engines have no model list — configured by key/URL
             if p == "cf_m2m100":  # reuses the cloudflare block's credentials
                 configured = cfg["cloudflare"].get("account_id") and cfg["cloudflare"].get("api_key")
-            elif p == "gtranslate_free":  # keyless — always available once selected
+            elif p in ("gtranslate_free", "mymemory"):  # keyless — always available once selected
                 configured = True
             else:
                 configured = cfg.get(p, {}).get("api_key") or cfg.get(p, {}).get("base_url")
