@@ -17,9 +17,11 @@ before translating.
 
 ## Screenshots
 
-| Library | Queue | Settings |
-|---|---|---|
-| [![Library](docs/library.png)](docs/library.png) | [![Queue](docs/queue.png)](docs/queue.png) | [![Settings](docs/settings.png)](docs/settings.png) |
+| Library | Settings — Providers |
+|---|---|
+| [![Library](docs/library.png)](docs/library.png) | [![Settings — Providers](docs/settings-providers.png)](docs/settings-providers.png) |
+| **Queue** | **Settings — Translation** |
+| [![Queue](docs/queue.png)](docs/queue.png) | [![Settings — Translation](docs/settings-translation.png)](docs/settings-translation.png) |
 
 ## Why another one?
 
