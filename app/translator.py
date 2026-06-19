@@ -929,6 +929,21 @@ def _batch_cap(provider, model, cfg):
     return overrides.get(model) or cfg["translation"].get("batch_size", 150)
 
 
+def _dedup_echoed_lines(lines):
+    """Some models echo a whole wrapped sentence onto each display line of a
+    multi-line source cue, producing N byte-identical lines (e.g. the full
+    Czech sentence repeated on both lines of a two-line cue). Collapse that to
+    a single copy.
+
+    Fires ONLY when every non-empty line is byte-for-byte identical, so an
+    intentional near-repeat in dialogue ('Forgot it? / Forgot it') — which
+    differs by punctuation or case — is deliberately left untouched."""
+    stripped = [ln for ln in lines if ln.strip()]
+    if len(stripped) > 1 and len(set(stripped)) == 1:
+        return [stripped[0]]
+    return lines
+
+
 def _quality_ok(batch, returned):
     """False when >40% of long (>15 char) entries came back identical to source."""
     long_total = sum(1 for _, _, t in batch if len(" ".join(t)) > 15)
@@ -999,13 +1014,13 @@ def _translate_all(srt_path, src_lang, tgt_lang, cfg, tmp, usage, fails):
             if _quality_ok(batch, returned):
                 for (src_num, _, _), (_, _, r_text) in zip(batch, returned):
                     if r_text:
-                        trl_map[src_num] = r_text
+                        trl_map[src_num] = _dedup_echoed_lines(r_text)
                 accepted = True
         elif finish == "MAX_TOKENS":
             log.info("MAX_TOKENS: %s/%s entries via number matching", len(returned), len(batch))
             for r_num, _, r_text in returned:
                 if r_text:
-                    trl_map[r_num] = r_text
+                    trl_map[r_num] = _dedup_echoed_lines(r_text)
             accepted = True
         else:
             log.warning("Attempt %s: count mismatch (sent %s, got %s) finish=%s — discarding",
