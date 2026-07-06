@@ -29,9 +29,26 @@ def _cpu_usage_usec():
     return ns // 1000 if ns is not None else None
 
 
+def _inactive_file_bytes():
+    # Reclaimable page cache — subtract it so we report the working set, not
+    # the kernel's file cache of media/subtitles (matches `docker stats`).
+    for path, key in (("/sys/fs/cgroup/memory.stat", "inactive_file"),
+                      ("/sys/fs/cgroup/memory/memory.stat", "total_inactive_file")):
+        try:
+            with open(path) as f:
+                for line in f:
+                    if line.startswith(key + " "):
+                        return int(line.split()[1])
+        except OSError:
+            continue
+    return 0
+
+
 def container_stats():
     mem = (_read_int("/sys/fs/cgroup/memory.current")
            or _read_int("/sys/fs/cgroup/memory/memory.usage_in_bytes"))
+    if mem:
+        mem = max(mem - (_inactive_file_bytes() or 0), 0)
     usage = _cpu_usage_usec()
     now = time.time()
     cpu_pct = None
