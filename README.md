@@ -13,6 +13,11 @@ before translating.
 > Status: **actively developed** — usable day to day. Still pre-1.0, so the odd rough
 > edge is possible, and this README grows as features land.
 
+> 💬 **Feedback is very welcome!** Got an idea, want a feature or a translation
+> provider added, hit a bug, or something just behaves oddly? Please
+> [open an issue](https://github.com/trelowney/translaitarr2/issues) — anything from a
+> one-line "would be nice if…" to a full bug report genuinely helps shape where this goes.
+
 ---
 
 ## Screenshots
