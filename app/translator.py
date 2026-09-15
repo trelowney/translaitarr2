@@ -38,7 +38,7 @@ LANG_NAMES = {
     "pol": "Polish", "ita": "Italian", "por": "Portuguese", "cze": "Czech",
 }
 
-DEFAULT_MODELS = ["gemini-2.0-flash", "gemini-2.0-flash-lite"]
+DEFAULT_MODELS = ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite"]
 
 
 class GeminiError(Exception):
@@ -202,11 +202,18 @@ def validate_srt(src_path, dst_path, v):
 
 # ── Gemini ────────────────────────────────────────────────────────────────────
 
+# Gemini lists these under generateContent, but they don't do text -> text.
+_NON_TEXT_MODEL = re.compile(
+    r"tts|image|banana|lyria|transcribe|robotics|computer-use|deep-research|antigravity|customtools")
+
+
 def list_available_models(api_key):
     """Query the Gemini API for models that support generateContent.
 
-    Returns a list of bare model ids (e.g. 'gemini-2.0-flash'). Flash-family
+    Returns a list of bare model ids (e.g. 'gemini-3.1-flash-lite'). Flash-family
     models are listed first (the ones this app actually uses), then the rest.
+    Models that can't translate text (TTS, image, music, robotics, agents…)
+    advertise generateContent too and are filtered out.
     """
     r = requests.get(
         "https://generativelanguage.googleapis.com/v1beta/models",
@@ -217,7 +224,7 @@ def list_available_models(api_key):
     for m in r.json().get("models", []):
         if "generateContent" in m.get("supportedGenerationMethods", []):
             name = m.get("name", "").split("/")[-1]
-            if name:
+            if name and not _NON_TEXT_MODEL.search(name):
                 names.append(name)
     flash = [n for n in names if "flash" in n]
     rest = [n for n in names if "flash" not in n]

@@ -232,7 +232,7 @@ output. Sensible starting points:
 
 | Model (example)              | Tier | Suggested batch (cues/request) | Notes                                    |
 |------------------------------|------|--------------------------------|------------------------------------------|
-| `gemini-3-flash` / `2.0-flash` | free | **~200**                       | Strong; handles large batches well       |
+| `gemini-3.x-flash` / `2.5-flash` | free | **~200**                     | Strong; handles large batches well       |
 | `*-flash-lite`               | free | **~150**                       | Faster/cheaper, slightly smaller batches |
 | `*-pro`                      | paid | ~250                           | Best quality; needs a paid key/quota     |
 

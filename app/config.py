@@ -41,28 +41,33 @@ DEFAULTS = {
     },
     "gemini": {
         "api_key": "",
-        # Full flash-family fallback order (newest -> oldest). On the free tier
+        # Flash-family fallback order (lite models first — they carry the biggest
+        # free-tier daily quota, the full flashes are the fallback). On the free tier
         # each model has its own daily quota, so the worker simply skips any that
         # return 429/5xx and tries the next. Paid-only pro models are omitted.
         "models": [
             "gemini-3.1-flash-lite",
+            "gemini-3.5-flash-lite",
+            "gemini-3.7-flash",
+            "gemini-3.6-flash",
             "gemini-3.5-flash",
             "gemini-3-flash-preview",
             "gemini-2.5-flash",
             "gemini-flash-latest",
             "gemini-2.5-flash-lite",
             "gemini-flash-lite-latest",
-            "gemini-2.0-flash",
-            "gemini-2.0-flash-lite",
+            "gemini-3.8-flash",
         ],
         # Per-model batch override (cues per request). Models not listed fall back
         # to translation.batch_size — that's where the smaller "lite" models land.
         "model_batch": {
+            "gemini-3.8-flash": 200,
+            "gemini-3.7-flash": 200,
+            "gemini-3.6-flash": 200,
             "gemini-3.5-flash": 200,
             "gemini-3-flash-preview": 200,
             "gemini-2.5-flash": 200,
             "gemini-flash-latest": 200,
-            "gemini-2.0-flash": 200,
         },
         # Per-model daily request cap. Models not listed fall back to
         # limits.max_daily_per_model. The worker skips a model once its count

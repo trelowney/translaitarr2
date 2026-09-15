@@ -159,10 +159,19 @@ function initModelWidget(root) {
         msg.textContent = "✓ " + (d.count || 0) + " models · " + (d.free || []).length + " free";
         msg.style.color = "var(--green)";
       } else {
-        let added = 0, present = 0;
-        (d.models || []).forEach((m) => { if (exists(m)) { present++; } else { ul.appendChild(makeLi(m)); added++; } });
+        let added = 0, present = 0, dropped = 0;
+        const offered = d.models || [];
+        offered.forEach((m) => { if (exists(m)) { present++; } else { ul.appendChild(makeLi(m)); added++; } });
+        // Models the API no longer offers would only waste a failed call + a
+        // cooldown when the chain falls through to them — drop them.
+        if (offered.length) {
+          [...ul.querySelectorAll("li")].forEach((li) => {
+            if (!offered.includes(li.dataset.model)) { li.remove(); dropped++; }
+          });
+        }
         sync(true);
-        msg.textContent = "✓ " + (d.models || []).length + " available · " + added + " added · " + present + " already in list";
+        msg.textContent = "✓ " + offered.length + " available · " + added + " added · " + present + " kept" +
+          (dropped ? " · " + dropped + " removed (no longer offered)" : "");
         msg.style.color = "var(--green)";
       }
     } catch (e) { msg.textContent = "✗ " + e; msg.style.color = "var(--red)"; }
