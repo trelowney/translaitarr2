@@ -226,6 +226,38 @@ def forget_sidecar(path):
     conn.close()
 
 
+def our_sidecar_paths():
+    conn = get_db()
+    rows = [r["path"] for r in conn.execute("SELECT path FROM our_sidecars").fetchall()]
+    conn.close()
+    return rows
+
+
+# ── Read-only summary for GET /api/stats ─────────────────────────────────────
+
+def queue_summary():
+    """Job counts by state, the running job and the most recently finished one."""
+    conn = get_db()
+    counts = {r["status"]: r["n"] for r in conn.execute(
+        "SELECT status, COUNT(*) AS n FROM jobs GROUP BY status").fetchall()}
+    running = conn.execute(
+        "SELECT title, file_path FROM jobs WHERE status='processing' ORDER BY started_at DESC LIMIT 1"
+    ).fetchone()
+    last = conn.execute(
+        """SELECT title, file_path, status, result, finished_at FROM jobs
+           WHERE status IN ('done','error') AND finished_at IS NOT NULL
+           ORDER BY finished_at DESC, id DESC LIMIT 1"""
+    ).fetchone()
+    conn.close()
+    return {
+        "queued": counts.get("pending", 0),
+        "running": counts.get("processing", 0),
+        "failed": counts.get("error", 0),
+        "current": dict(running) if running else None,
+        "last": dict(last) if last else None,
+    }
+
+
 # ── Daily usage counters ──────────────────────────────────────────────────────
 
 def _today():

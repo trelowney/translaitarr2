@@ -5,6 +5,8 @@ first-run setup wizard, never shipped with the image. Secrets may also come from
 environment variables (or *_FILE Docker secrets), which always win over the file.
 """
 import copy
+import hashlib
+import hmac
 import json
 import os
 
@@ -30,6 +32,7 @@ SECRET_PATHS = (
     ("arr", "sonarr", "api_key"),
     ("arr", "radarr", "api_key"),
     ("auth", "password_hash"),
+    ("api", "key"),
 )
 
 DEFAULTS = {
@@ -152,6 +155,10 @@ DEFAULTS = {
     # instance id (generated once, stored here) + the app version, once a day. No paths,
     # keys, library data or anything internal. See telemetry.py / README.
     "telemetry": {"enabled": True, "instance_id": ""},
+    # Optional read-only API key for dashboards (e.g. Homepage) → GET /api/stats.
+    # Stored like the other keys in this file; redacted from logs and /status, and only
+    # revealed to a signed-in session on request (Settings → Security → Show / Copy).
+    "api": {"key": "", "key_created": ""},
     "translation": {
         "api_timeout": 1200,
         "max_output_tokens": 65536,
@@ -279,6 +286,13 @@ def load_config():
         cfg.setdefault(p, {}).setdefault("prompt", "")
         cfg[p].setdefault("glossary", "")
     cfg.setdefault("translation", {}).setdefault("formality", "auto")
+    # Dashboard API key (added in 0.1.10). Older configs get it from DEFAULTS via the
+    # merge; this only repairs a hand-edited value of the wrong type.
+    if not isinstance(cfg.get("api"), dict):
+        cfg["api"] = copy.deepcopy(DEFAULTS["api"])
+    for k in ("key", "key_created"):
+        if not isinstance(cfg["api"].get(k), str):
+            cfg["api"][k] = ""
     # Environment / secrets override the file.
     for name, path in ENV_OVERRIDES.items():
         val = _env_value(name)
@@ -306,6 +320,17 @@ def redact(cfg):
         if _get_path(safe, path):
             _set_path(safe, path, "********")
     return safe
+
+
+def verify_api_key(cfg, key):
+    """Constant-time check of a presented API key against the stored one. Both sides
+    are hashed first so the comparison is fixed-length and safe for any input.
+    False when no key is configured, so an empty/unset key can never match."""
+    stored = _get_path(cfg, ("api", "key"))
+    if not isinstance(stored, str) or not stored or not key or len(key) > 256:
+        return False
+    digest = lambda v: hashlib.sha256(v.encode("utf-8")).digest()
+    return hmac.compare_digest(digest(key), digest(stored))
 
 
 def hash_password(plain):

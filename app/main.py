@@ -111,6 +111,8 @@ def gate():
     endpoint = request.endpoint or ""
     if endpoint in PUBLIC_ENDPOINTS:
         return None
+    if endpoint == "api_stats":
+        return _gate_api_stats()
 
     cfg = cfgmod.load_config()
     if not cfg.get("onboarding_completed"):
@@ -125,6 +127,42 @@ def gate():
         if endpoint in WIZARD_API:
             return jsonify({"ok": False, "message": "Authentication required"}), 401
         return redirect(url_for("login"))
+    return None
+
+
+_BAD_KEY_LOGGED = {}
+
+
+def _gate_api_stats():
+    """Access rules for the read-only GET /api/stats (dashboards such as Homepage).
+
+    - A valid ``X-Api-Key`` header always gets in.
+    - A wrong key is rejected outright; it never falls back to a session.
+    - With an API key configured, callers without the header also need a
+      signed-in browser session.
+    - With no key configured it follows the normal rules: open when no password
+      is set, sign-in required when one is.
+    Answers JSON errors instead of redirects. The key is only ever accepted in the
+    header, never in the URL, where it would end up in logs and browser history.
+    """
+    cfg = cfgmod.load_config()
+    presented = request.headers.get("X-Api-Key", "")
+    if presented:
+        if cfgmod.verify_api_key(cfg, presented):
+            return None
+        ip = request.remote_addr or "?"
+        now = time.time()
+        if len(_BAD_KEY_LOGGED) > 1024:              # bounded: can't be grown by many clients
+            _BAD_KEY_LOGGED.clear()
+        if now - _BAD_KEY_LOGGED.get(ip, 0) > 600:   # at most one line per client / 10 min
+            _BAD_KEY_LOGGED[ip] = now
+            log.warning("GET /api/stats: rejected an invalid API key from %s", ip)
+        return jsonify({"error": "Invalid API key"}), 401
+    if not cfg.get("onboarding_completed"):
+        return jsonify({"error": "Setup not completed"}), 503
+    if cfg.get("api", {}).get("key") or cfg.get("auth", {}).get("enabled"):
+        if not session.get("authed"):
+            return jsonify({"error": "Authentication required — send the API key in the X-Api-Key header"}), 401
     return None
 
 
@@ -1046,6 +1084,92 @@ def save_secret():
     node[path[-1]] = value
     cfgmod.save_config(cfg)
     return jsonify({"ok": True, "message": "Saved"})
+
+
+# ── Read-only stats for dashboards (Homepage etc.) ────────────────────────────
+def _iso_utc(sqlite_ts):
+    """SQLite datetime('now') → ISO 8601 UTC, e.g. 2026-09-23T16:05:00Z."""
+    return sqlite_ts.replace(" ", "T") + "Z" if sqlite_ts else None
+
+
+def _job_name(row):
+    # The *arr title; fall back to the file name, never the full server path.
+    return (row.get("title") or os.path.basename(row.get("file_path") or "")) or None
+
+
+def _result_kind(row):
+    """Normalise a finished job's free-text result to a stable keyword for dashboards:
+    translated | skipped | verified | verify_issues | verify_failed | error | done."""
+    if row["status"] == "error":
+        return "error"
+    res = row.get("result") or ""
+    for prefix, kind in (("translated", "translated"), ("skipped", "skipped"),
+                         ("verify ✓", "verified"), ("verify ⚠", "verify_issues"),
+                         ("verify", "verify_failed")):
+        if res.startswith(prefix):
+            return kind
+    return "done"
+
+
+@app.route("/api/stats")
+def api_stats():
+    """Compact, flat JSON summary for dashboard widgets (built for Homepage's
+    customapi widget). Read-only, no side effects. Access: see _gate_api_stats."""
+    cfg = cfgmod.load_config()
+    q = db.queue_summary()
+    lib = scanner.library_counts()
+    last = q["last"]
+    last_result = _result_kind(last) if last else None
+    resp = jsonify({
+        "version": version.__version__,
+        "queued": q["queued"],
+        "running": q["running"],
+        "current": _job_name(q["current"]) if q["current"] else None,
+        "failed": q["failed"],
+        "translated": lib["translated"],
+        "to_translate": lib["to_translate"],
+        "no_source": lib["no_source"],
+        "library": lib["library"],
+        "today_calls": db.today_total(),
+        "today_limit": cfg["limits"].get("max_daily_total", 120),
+        "last_title": _job_name(last) if last else None,
+        "last_result": last_result,
+        "last_finished": _iso_utc(last["finished_at"]) if last else None,
+    })
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.route("/settings/api-key", methods=["POST"], endpoint="settings_api_key")
+def settings_api_key():
+    """Generate / reveal / revoke the dashboard API key. Behind the normal login gate;
+    the custom header can't be sent cross-site without a CORS preflight (which this
+    app never grants), so this can't be triggered or read from another website.
+    The key is never embedded in the Settings HTML — only returned here, no-store."""
+    if request.headers.get("X-Requested-With") != "fetch":
+        return jsonify({"ok": False, "message": "Bad request"}), 400
+    action = (request.get_json(silent=True) or {}).get("action")
+    cfg = cfgmod.load_config()
+    if action == "generate":
+        cfg["api"]["key"] = secrets.token_hex(16)   # 128-bit, same shape as Sonarr/Radarr keys
+        cfg["api"]["key_created"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        cfgmod.save_config(cfg)
+        log.info("API key generated (previous key, if any, no longer works)")
+        return jsonify({"ok": True, "created": cfg["api"]["key_created"]})
+    if action == "reveal":
+        key = cfg["api"].get("key", "")
+        if not key:
+            return jsonify({"ok": False, "message": "No key set"}), 404
+        resp = jsonify({"ok": True, "key": key})
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+    if action == "revoke":
+        cfg["api"]["key"] = ""
+        cfg["api"]["key_created"] = ""
+        cfgmod.save_config(cfg)
+        log.info("API key revoked")
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "message": "Unknown action"}), 400
 
 
 # ── Status (redacted — safe to expose) ────────────────────────────────────────

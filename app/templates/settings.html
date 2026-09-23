@@ -404,6 +404,104 @@
   <p class="hint">The login cookie is persistent, so closing the browser (or backgrounding it on mobile) no longer logs you out before this expires. A new sign-in picks up any change here.</p>
   <div class="model-add" style="margin-top:12px"><button type="submit" class="small">Save security settings</button></div>
 </form>
+
+<div class="card" id="set-api" data-sec="security">
+  <h2>API access</h2>
+  <p class="hint">A read-only API key for dashboards. It was added for the <a href="https://gethomepage.dev" target="_blank" rel="noopener">Homepage</a> dashboard, so it can show queue and library numbers, and any tool that can send a header can use it. It only unlocks <code>GET /api/stats</code>. It can't change anything, and it can't read your settings or keys. Send it in the <code>X-Api-Key</code> header.</p>
+  <p id="api-key-state" class="hint" style="margin-top:10px">
+    {% if cfg.api.key %}<span style="color:var(--green)">●</span> A key is set (created {{ cfg.api.key_created or "earlier" }}).{% else %}No key yet — /api/stats follows the password setting above.{% endif %}
+  </p>
+  <div id="api-key-row" style="{{ '' if cfg.api.key else 'display:none;' }}margin-top:10px">
+    <label>API key</label>
+    <div class="secret">
+      <input type="password" id="api-key-value" readonly spellcheck="false" autocomplete="off" value="••••••••••••••••••••••••••••••••" aria-label="API key (hidden)">
+      <button type="button" class="small" id="api-key-show">Show</button>
+      <button type="button" class="small" id="api-key-copy">Copy</button>
+    </div>
+  </div>
+  <div class="model-add" style="margin-top:12px">
+    <button type="button" class="small" id="api-key-generate">{{ 'Regenerate key' if cfg.api.key else 'Generate key' }}</button>
+    <button type="button" class="small" id="api-key-revoke" style="{{ '' if cfg.api.key else 'display:none' }}">Revoke key</button>
+    <span id="api-key-msg" class="hint"></span>
+  </div>
+</div>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var gen = $("api-key-generate"), rev = $("api-key-revoke"), row = $("api-key-row");
+  var val = $("api-key-value"), show = $("api-key-show"), copy = $("api-key-copy");
+  var state = $("api-key-state"), msg = $("api-key-msg");
+  if (!gen) return;
+  var MASK = "••••••••••••••••••••••••••••••••";
+  var pending = null;   // in-flight / cached reveal, so Copy can run inside the click gesture
+
+  function call(action) {
+    return fetch("{{ url_for('settings_api_key') }}", {
+      method: "POST", credentials: "same-origin", cache: "no-store",
+      headers: { "Content-Type": "application/json", "X-Requested-With": "fetch" },
+      body: JSON.stringify({ action: action })
+    }).then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.ok) throw new Error(d.message || ("HTTP " + r.status)); return d; }); });
+  }
+  function reveal() { if (!pending) pending = call("reveal").then(function (d) { return d.key; }).catch(function (e) { pending = null; throw e; }); return pending; }
+  function forget() { pending = null; hide(); }
+  function hide() { val.type = "password"; val.value = MASK; show.textContent = "Show"; }
+  function say(t) { msg.textContent = t; clearTimeout(say.t); say.t = setTimeout(function () { msg.textContent = ""; }, 4000); }
+
+  show.addEventListener("click", function () {
+    if (val.type === "text") return hide();
+    reveal().then(function (k) { val.type = "text"; val.value = k; show.textContent = "Hide"; })
+            .catch(function (e) { say("✗ " + e.message); });
+  });
+
+  // Copy without showing. navigator.clipboard only exists on HTTPS/localhost, so on a
+  // plain-http LAN address fall back to a hidden textarea + execCommand, which must run
+  // inside the click → the key is prefetched as soon as the pointer/focus reaches the button.
+  ["pointerenter", "pointerdown", "touchstart", "focus"].forEach(function (ev) {
+    copy.addEventListener(ev, function () { reveal().catch(function () {}); }, { passive: true });
+  });
+  function legacyCopy(text) {
+    var ta = document.createElement("textarea");
+    ta.value = text; ta.setAttribute("readonly", "");
+    ta.style.cssText = "position:fixed;top:-1000px;left:-1000px;opacity:0";
+    document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, text.length);
+    var ok = false; try { ok = document.execCommand("copy"); } catch (e) {}
+    document.body.removeChild(ta);
+    return ok;
+  }
+  copy.addEventListener("click", function () {
+    reveal().then(function (k) {
+      if (navigator.clipboard && window.isSecureContext) {
+        return navigator.clipboard.writeText(k).then(function () { say("✓ Copied"); },
+          function () { say(legacyCopy(k) ? "✓ Copied" : "✗ Copy blocked by the browser — use Show"); });
+      }
+      say(legacyCopy(k) ? "✓ Copied" : "✗ Copy blocked by the browser — use Show");
+    }).catch(function (e) { say("✗ " + e.message); });
+  });
+
+  gen.addEventListener("click", function () {
+    if (rev.style.display !== "none" && !confirm("Generate a new key? The current key stops working immediately, so update every dashboard that uses it.")) return;
+    gen.disabled = true;
+    call("generate").then(function (d) {
+      forget(); row.style.display = "";
+      state.innerHTML = '<span style="color:var(--green)">●</span> A key is set (created ' + d.created + ').';
+      gen.textContent = "Regenerate key"; rev.style.display = "";
+      say("✓ New key generated — use Show or Copy");
+    }).catch(function (e) { say("✗ " + e.message); })
+      .finally(function () { gen.disabled = false; });
+  });
+  rev.addEventListener("click", function () {
+    if (!confirm("Revoke the API key? Dashboards using it will stop working.")) return;
+    rev.disabled = true;
+    call("revoke").then(function () {
+      forget(); row.style.display = "none";
+      state.textContent = "No key yet — /api/stats follows the password setting above.";
+      gen.textContent = "Generate key"; rev.style.display = "none";
+      say("✓ Key revoked");
+    }).catch(function (e) { say("✗ " + e.message); })
+      .finally(function () { rev.disabled = false; });
+  });
+})();
+</script>
 </div>
 
 <script>

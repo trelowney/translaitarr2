@@ -74,6 +74,9 @@ translAItarr2 handles those cases:
 - **Live queue** — jobs, today's per-model usage, **per-provider usage where available**
   (DeepL characters left, OpenRouter credit), outcome tallies, container CPU/RAM and a live
   log, all auto-refreshing; Settings auto-save (no Save button).
+- **Dashboard-ready** — a read-only, API-key-protected `GET /api/stats` endpoint, built for
+  [Homepage](https://gethomepage.dev) so it can show queue and library numbers
+  ([setup](#dashboard-integration-homepage)).
 - **Privacy & safety first** — secrets stay in your local config volume, redacted from
   logs; runs as a non-root user; in-app update check. The only thing that ever leaves your
   server is an **anonymous instance counter** (a random id + version, once a day) that you
@@ -97,6 +100,7 @@ Where things stand:
 - Setup wizard, optional password, auto-saving settings, live queue (usage + per-provider usage + outcomes + CPU/RAM + log)
 - Optional translation verification — model-judged so it tolerates paraphrase; automatic or on demand
 - Path remapping (UI), in-app update check, multi-arch Docker image
+- Read-only, API-key-protected `GET /api/stats` for dashboards, built for [Homepage](#dashboard-integration-homepage)
 
 **Planned (later)**
 - UI translations (i18n) — only if the community asks for it; then community-driven via Weblate (the app stays English-first, like Bazarr/Lingarr)
@@ -248,6 +252,80 @@ the image or the repo. You can also supply any secret via an environment variabl
 or via a Docker secret using the `*_FILE` convention
 (e.g. `GEMINI_API_KEY_FILE=/run/secrets/gemini_key`). Keys are write-only in the UI
 and redacted from logs.
+
+## Dashboard integration (Homepage)
+
+translAItarr2 exposes a small **read-only stats endpoint**, `GET /api/stats`. It was added for
+the [Homepage](https://gethomepage.dev) dashboard, so Homepage can show your queue and library
+numbers next to Sonarr, Radarr and the rest. It is plain JSON, so any dashboard or script that
+can send an HTTP header can read it too.
+
+**1. Create a key.** In **Settings → Security → API access**, click **Generate key**, then
+**Copy** (or **Show**). The key stays masked in the UI, like your other keys, and can be shown or
+copied again later by a signed-in user. **Regenerate** invalidates the old key immediately.
+
+**2. Call the endpoint** with the key in the `X-Api-Key` header:
+
+```bash
+curl -H "X-Api-Key: <your key>" http://<your-server>:9878/api/stats
+```
+
+```json
+{
+  "version": "0.1.10",
+  "queued": 2, "running": 1, "current": "Slow Horses - S06E03 - ...", "failed": 0,
+  "translated": 412, "to_translate": 7, "no_source": 3, "library": 1650,
+  "today_calls": 38, "today_limit": 120,
+  "last_title": "Dune: Part Two", "last_result": "translated", "last_finished": "2026-09-23T16:05:00Z"
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `queued` / `running` / `failed` | Jobs waiting, running now, and in an error state (as on the Queue page) |
+| `current` | Title of the running job, or `null` |
+| `translated` | Subtitle files translAItarr2 created that are still on disk |
+| `to_translate` | Library files waiting for a translation (new or upgraded releases) |
+| `no_source` | Files with no usable source subtitle |
+| `library` | Video files in the library (as of the last library scan) |
+| `today_calls` / `today_limit` | Translation calls made today and the daily cap |
+| `last_title` / `last_result` / `last_finished` | The most recently finished job: its title, one of `translated`, `skipped`, `verified`, `verify_issues`, `verify_failed`, `error`, `done`, and when it finished (UTC) |
+
+**3. Add it to Homepage** with the [`customapi`](https://gethomepage.dev/widgets/services/customapi/) widget:
+
+```yaml
+- translAItarr2:
+    icon: https://raw.githubusercontent.com/trelowney/translaitarr2/main/app/static/favicon.svg
+    href: http://<your-server>:9878
+    description: Subtitle translation
+    widget:
+      type: customapi
+      url: http://translaitarr2:9878/api/stats   # or http://<your-server>:9878/api/stats
+      refreshInterval: 60000
+      headers:
+        X-Api-Key: "{{HOMEPAGE_VAR_TRANSLAITARR2_KEY}}"
+      mappings:
+        - field: queued
+          label: Queued
+        - field: translated
+          label: Translated
+        - field: to_translate
+          label: Missing
+        - field: failed
+          label: Failed
+```
+
+**Security notes**
+
+- The key only unlocks `/api/stats`. It can't change anything, and it can't read your settings,
+  API keys or file paths.
+- The key is accepted **only in the header**, never in the URL, where it would leak into logs and
+  browser history.
+- A wrong key gets `401` and is never retried against your login session.
+- Once a key is set, `/api/stats` requires it, or a signed-in browser session. With **no** key it
+  follows your password setting: open if you haven't set a password, sign-in required if you have.
+- Revoke or regenerate the key at any time in Settings; the old one stops working immediately.
+- In Settings the key is masked. **Show** and **Copy** fetch it on demand for a signed-in session only. It is never embedded in the page, and it is redacted from logs and the status page like your other keys.
 
 ## Default port
 
