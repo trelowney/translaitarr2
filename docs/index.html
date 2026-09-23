@@ -90,7 +90,7 @@
   .cue .foot { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line); color: var(--faint); font-size: 12.5px; display: flex; justify-content: space-between; }
   .cue .foot .ok { color: var(--green); }
 
-  section { padding: 64px 0; }
+  section { padding: 64px 0; scroll-margin-top: 60px; }
   section + section { border-top: 1px solid var(--line); }
   h2 { font-size: 28px; margin: 0 0 10px; letter-spacing: -.01em; }
   .sub { color: var(--dim); margin: 0 0 32px; max-width: 44em; }
@@ -130,6 +130,17 @@
   .step p { margin: 3px 0 10px; }
   .step > div, .hero .wrap > div { min-width: 0; }
   @media (max-width: 480px) { .cue .foot { flex-direction: column; gap: 4px; } .cue .out { font-size: 17px; } }
+  @media (max-width: 560px) {
+    .hero { padding: 40px 0 36px; }
+    section { padding: 44px 0; }
+    h2 { font-size: 24px; }
+    .sub { margin-bottom: 22px; }
+    .step { grid-template-columns: 1fr; gap: 8px; }
+    pre { font-size: 12px; padding: 14px; }
+    .cue { padding: 18px; }
+    footer a { display: inline-block; padding: 8px 2px; }
+    .brand { font-size: 17px; }
+  }
   code { font-family: var(--mono); font-size: .92em; background: var(--elev); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
 
   footer { border-top: 1px solid var(--line); padding: 32px 0 44px; color: var(--faint); font-size: 14px; }
