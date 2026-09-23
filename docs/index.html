@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>translAItarr2 — AI subtitle translation for Sonarr &amp; Radarr</title>
+<meta name="description" content="Self-hosted AI subtitle translation for your media library. Web UI, native Sonarr/Radarr integration, embedded-subtitle extraction and Blu-ray PGS OCR. Gemini, DeepL, Claude, OpenRouter, Ollama and more. Free, open source (GPL-3.0), runs in Docker.">
+<link rel="canonical" href="https://trelowney.github.io/translaitarr2/">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#0e1014">
+<meta property="og:type" content="website">
+<meta property="og:title" content="translAItarr2 — AI subtitle translation for Sonarr & Radarr">
+<meta property="og:description" content="Translates subtitles for your whole library — even ones embedded in the MKV or burned-in Blu-ray PGS bitmaps. Self-hosted, Docker, 13 translation engines.">
+<meta property="og:url" content="https://trelowney.github.io/translaitarr2/">
+<meta property="og:image" content="https://trelowney.github.io/translaitarr2/library.png">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "translAItarr2",
+  "applicationCategory": "MultimediaApplication",
+  "operatingSystem": "Linux, Docker",
+  "description": "Self-hosted AI subtitle translation for your media library with a web UI and native Sonarr/Radarr integration, embedded-subtitle extraction and Blu-ray PGS OCR.",
+  "url": "https://trelowney.github.io/translaitarr2/",
+  "downloadUrl": "https://github.com/trelowney/translaitarr2",
+  "codeRepository": "https://github.com/trelowney/translaitarr2",
+  "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+<style>
+  :root {
+    --bg: #0e1014; --panel: #15181e; --elev: #1b1f27; --line: #252a33;
+    --tx: #e8eaef; --dim: #9099a6; --faint: #5b6470;
+    --accent: #5aa2ff; --accent-soft: rgba(90,162,255,.14); --accent-line: rgba(90,162,255,.34);
+    --green: #48c66b;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--tx);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+
+  /* nav */
+  nav { position: sticky; top: 0; z-index: 10; background: rgba(14,16,20,.82); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+  nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; color: var(--tx); }
+  .brand:hover { text-decoration: none; }
+  .brand img { width: 28px; height: 28px; }
+  .brand b { color: var(--accent); }
+  .navlinks { display: flex; gap: 22px; align-items: center; font-size: 14.5px; }
+  .navlinks a { color: var(--dim); }
+  .navlinks a:hover { color: var(--tx); text-decoration: none; }
+  @media (max-width: 640px) { .navlinks a:not(.btn) { display: none; } }
+
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: 15px; border: 1px solid var(--line); color: var(--tx); background: var(--elev); }
+  .btn:hover { text-decoration: none; border-color: var(--accent-line); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #08101e; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.sm { padding: 7px 13px; font-size: 14px; }
+  .btn svg { width: 18px; height: 18px; }
+
+  /* hero */
+  .hero { padding: 84px 0 56px; background: radial-gradient(900px 420px at 50% -10%, var(--accent-soft), transparent 70%); }
+  .hero .wrap { display: grid; grid-template-columns: 1.05fr .95fr; gap: 48px; align-items: center; }
+  @media (max-width: 900px) { .hero .wrap { grid-template-columns: 1fr; } .hero { padding-top: 56px; } }
+  h1 { font-size: clamp(34px, 5vw, 50px); line-height: 1.1; margin: 0 0 18px; letter-spacing: -.02em; }
+  h1 b { color: var(--accent); }
+  .lead { color: var(--dim); font-size: 18px; margin: 0 0 28px; max-width: 34em; }
+  .cta { display: flex; gap: 12px; flex-wrap: wrap; }
+  .meta { margin-top: 22px; font-family: var(--mono); font-size: 13px; color: var(--faint); display: flex; gap: 16px; flex-wrap: wrap; }
+
+  /* the subtitle-cue motif */
+  .cue { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 22px 24px; font-family: var(--mono); box-shadow: 0 30px 80px rgba(0,0,0,.35); }
+  .cue .idx { color: var(--faint); font-size: 13px; }
+  .cue .time { color: var(--dim); font-size: 13.5px; margin-bottom: 14px; }
+  .cue .time b { color: var(--accent); font-weight: 500; }
+  .cue .src { color: var(--dim); font-size: 16px; margin-bottom: 10px; }
+  .cue .arrow { color: var(--faint); font-size: 13px; margin: 6px 0 8px; display: flex; align-items: center; gap: 8px; }
+  .cue .arrow .tag { color: var(--accent); border: 1px solid var(--accent-line); background: var(--accent-soft); border-radius: 6px; padding: 1px 7px; font-size: 12px; }
+  .cue .out { color: var(--tx); font-size: 19px; min-height: 2.8em; transition: opacity .45s ease; }
+  .cue .out.fade { opacity: 0; }
+  .cue .foot { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line); color: var(--faint); font-size: 12.5px; display: flex; justify-content: space-between; }
+  .cue .foot .ok { color: var(--green); }
+
+  section { padding: 64px 0; }
+  section + section { border-top: 1px solid var(--line); }
+  h2 { font-size: 28px; margin: 0 0 10px; letter-spacing: -.01em; }
+  .sub { color: var(--dim); margin: 0 0 32px; max-width: 44em; }
+
+  .checks { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  @media (max-width: 720px) { .checks { grid-template-columns: 1fr; } }
+  .check { display: flex; gap: 12px; padding: 16px 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+  .check i { flex: none; width: 22px; height: 22px; border-radius: 50%; background: rgba(72,198,107,.15); color: var(--green); display: grid; place-items: center; font-style: normal; font-size: 13px; font-weight: 700; margin-top: 2px; }
+
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
+  .card h3 { margin: 0 0 6px; font-size: 16.5px; }
+  .card p { margin: 0; color: var(--dim); font-size: 15px; }
+  .card .ic { width: 36px; height: 36px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; margin-bottom: 14px; }
+  .card .ic svg { width: 20px; height: 20px; }
+
+  .shots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  @media (max-width: 720px) { .shots { grid-template-columns: 1fr; } }
+  .shots a { display: block; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--panel); }
+  .shots a:hover { border-color: var(--accent-line); }
+  .shots img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; object-position: top; }
+  .shots figcaption { padding: 10px 14px; font-size: 14px; color: var(--dim); border-top: 1px solid var(--line); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+  .chip { padding: 6px 12px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); font-size: 14px; }
+  .chip.llm { border-color: var(--accent-line); }
+  .label { font-family: var(--mono); font-size: 12.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 10px; }
+
+  pre { margin: 0; background: #0a0c10; border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; overflow-x: auto; font: 13.5px/1.6 var(--mono); color: #cdd3dc; }
+  pre .c { color: var(--faint); }
+  pre .k { color: #8ab8ff; }
+  .steps { display: grid; gap: 22px; }
+  .step { display: grid; grid-template-columns: 34px 1fr; gap: 14px; }
+  .step .n { width: 30px; height: 30px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 700; display: grid; place-items: center; font-size: 14px; }
+  .step p { margin: 3px 0 10px; }
+  .step > div, .hero .wrap > div { min-width: 0; }
+  @media (max-width: 480px) { .cue .foot { flex-direction: column; gap: 4px; } .cue .out { font-size: 17px; } }
+  code { font-family: var(--mono); font-size: .92em; background: var(--elev); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
+
+  footer { border-top: 1px solid var(--line); padding: 32px 0 44px; color: var(--faint); font-size: 14px; }
+  footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  footer a { color: var(--dim); }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#"><img src="favicon.svg" alt=""><span>transl<b>AI</b>tarr2</span></a>
+    <div class="navlinks">
+      <a href="#why">Why</a>
+      <a href="#features">Features</a>
+      <a href="#providers">Providers</a>
+      <a href="#quick-start">Quick start</a>
+      <a class="btn sm" href="https://github.com/trelowney/translaitarr2">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div>
+      <h1>AI subtitle translation for your <b>whole media library</b></h1>
+      <p class="lead">translAItarr2 watches your Sonarr and Radarr library, finds every video without a subtitle in your language, and translates one, even when the only subtitle is <strong>embedded in the MKV</strong> or is a <strong>Blu-ray PGS bitmap</strong>. It's self-hosted, it has a web UI, and nothing needs hand-editing.</p>
+      <div class="cta">
+        <a class="btn primary" href="#quick-start">Get started</a>
+        <a class="btn" href="https://github.com/trelowney/translaitarr2">View on GitHub</a>
+      </div>
+      <div class="meta"><span>docker · multi-arch</span><span>GPL-3.0</span><span>13 translation engines</span></div>
+    </div>
+
+    <div class="cue" aria-label="Example: a subtitle cue being translated">
+      <div class="idx">412</div>
+      <div class="time">00:41:07,<b>310</b> --&gt; 00:41:09,<b>950</b></div>
+      <div class="src">I told you not to open that door.</div>
+      <div class="arrow"><span class="tag" id="cue-lang">EN → CS</span> gemini-flash · batch 120</div>
+      <div class="out" id="cue-out">Říkal jsem ti, ať ty dveře neotvíráš.</div>
+      <div class="foot"><span>Movie.2024.1080p.mkv · PGS → OCR</span><span class="ok">✓ verified</span></div>
+    </div>
+  </div>
+</header>
+
+<main>
+<section id="why">
+  <div class="wrap">
+    <h2>Why another subtitle translator?</h2>
+    <p class="sub">Tools like Bazarr and Lingarr translate subtitle files that already exist on disk. They can't help when the only English subtitle is embedded inside the video or is a PGS bitmap, which is common on Blu-ray rips. translAItarr2 handles those cases:</p>
+    <div class="checks">
+      <div class="check"><i>✓</i><div>Extracts and translates <strong>embedded</strong> text subtitles straight from the video</div></div>
+      <div class="check"><i>✓</i><div><strong>OCRs PGS</strong> (Blu-ray bitmap) subtitles to text, then translates them</div></div>
+      <div class="check"><i>✓</i><div>Skips files that <strong>already have</strong> your language, whether as audio, an embedded sub or a sidecar</div></div>
+      <div class="check"><i>✓</i><div>Picks the best <strong>source language</strong> by your priority: English first, then French, German…</div></div>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <h2>Features</h2>
+    <p class="sub">Built for people who already run an *arr stack and want every title in their language, without babysitting it.</p>
+    <div class="grid">
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></div><h3>Native Sonarr/Radarr</h3><p>Talks to their REST API directly, so you see real series, episode and movie titles. No webhook is needed, and path remapping auto-detects your root folders.</p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><h3>Fully automatic</h3><p>A periodic scan translates anything new. It re-translates when a release gets upgraded, and you can still run per-title or bulk jobs by hand.</p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/><path d="M8 4v16"/></svg></div><h3>13 engines, with fallbacks</h3><p>Choose a primary engine plus two fallbacks, which can be from different providers. Set batch sizes and daily limits per model, and override the provider for any single job.</p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg></div><h3>Translation verification</h3><p>An optional check samples the result and has a model judge each line's meaning against the source. It tolerates paraphrase and flags only lines that are genuinely wrong.</p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M7 21h10"/></svg></div><h3>A web UI, not a config file</h3><p>A setup wizard, a Library view, a live Queue with per-model usage and a live log, and Settings that save themselves. Includes a dark and a light theme.</p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg></div><h3>Private by design</h3><p>Your keys stay in your config volume and are redacted from logs. The app runs as a non-root user. The only data that ever leaves your server is an anonymous instance counter, and you can switch it off.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="screenshots">
+  <div class="wrap">
+    <h2>Screenshots</h2>
+    <p class="sub">The Library, Queue and Settings, as they look in the app.</p>
+    <div class="shots">
+      <a href="library.png"><figure style="margin:0"><img src="library.png" alt="Library view: movies and TV shows with their subtitle status" loading="lazy"><figcaption>Library</figcaption></figure></a>
+      <a href="queue.png"><figure style="margin:0"><img src="queue.png" alt="Queue: translation jobs, model usage and live log" loading="lazy"><figcaption>Queue</figcaption></figure></a>
+      <a href="settings-providers.png"><figure style="margin:0"><img src="settings-providers.png" alt="Settings: AI provider configuration" loading="lazy"><figcaption>Settings — Providers</figcaption></figure></a>
+      <a href="settings-translation.png"><figure style="margin:0"><img src="settings-translation.png" alt="Settings: translation options" loading="lazy"><figcaption>Settings — Translation</figcaption></figure></a>
+    </div>
+  </div>
+</section>
+
+<section id="providers">
+  <div class="wrap">
+    <h2>Your choice of translation engine</h2>
+    <p class="sub">Use cloud APIs, or keep everything local. You can combine them too, for example DeepL as the primary with a local Ollama model as the fallback, so translation never hits a hard stop.</p>
+    <p class="label">LLMs — best at idioms and context</p>
+    <div class="chips">
+      <span class="chip llm">Google Gemini</span><span class="chip llm">OpenRouter (300+ models)</span><span class="chip llm">Anthropic Claude</span><span class="chip llm">Cloudflare Workers AI</span><span class="chip llm">Ollama</span><span class="chip llm">LM Studio</span><span class="chip llm">vLLM</span><span class="chip llm">Groq</span><span class="chip llm">DeepSeek</span><span class="chip llm">any OpenAI-compatible API</span>
+    </div>
+    <p class="label">Machine translation — fast and cheap</p>
+    <div class="chips">
+      <span class="chip">DeepL</span><span class="chip">LibreTranslate</span><span class="chip">Google Translate</span><span class="chip">Microsoft / Azure</span><span class="chip">Yandex</span><span class="chip">Cloudflare m2m100</span><span class="chip">MyMemory</span><span class="chip">Google (keyless)</span>
+    </div>
+  </div>
+</section>
+
+<section id="quick-start">
+  <div class="wrap">
+    <h2>Quick start</h2>
+    <p class="sub">You don't need to clone anything, because the image is published to GitHub Container Registry.</p>
+    <div class="steps">
+      <div class="step"><div class="n">1</div><div>
+        <p>Create a <code>docker-compose.yaml</code>:</p>
+<pre><span class="k">services</span>:
+  <span class="k">translaitarr2</span>:
+    <span class="k">image</span>: ghcr.io/trelowney/translaitarr2:latest
+    <span class="k">container_name</span>: translaitarr2
+    <span class="k">environment</span>:
+      - PUID=1000           <span class="c"># your user id   (run `id` on the host)</span>
+      - PGID=1000           <span class="c"># your group id</span>
+      - TZ=Europe/Prague    <span class="c"># your timezone</span>
+    <span class="k">volumes</span>:
+      - ./config:/config            <span class="c"># settings, queue + your API keys</span>
+      - /path/to/media:/data        <span class="c"># the library Sonarr/Radarr manage</span>
+    <span class="k">ports</span>:
+      - 9878:9878
+    <span class="k">restart</span>: unless-stopped</pre>
+      </div></div>
+      <div class="step"><div class="n">2</div><div>
+        <p>Set your media path and PUID/PGID/TZ, then start it:</p>
+        <pre>docker compose up -d</pre>
+      </div></div>
+      <div class="step"><div class="n">3</div><div>
+        <p>Open <code>http://&lt;your-server&gt;:9878</code> and follow the setup wizard. It connects Sonarr/Radarr and your translation engine and sets your languages. Already running an *arr stack? Add the service to the same compose file and use names like <code>http://sonarr:8989</code>.</p>
+        <p><a href="https://github.com/trelowney/translaitarr2#readme">Full documentation on GitHub →</a></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>translAItarr2 · free and open source under GPL-3.0</span>
+    <span><a href="https://github.com/trelowney/translaitarr2">GitHub</a> · <a href="https://github.com/trelowney/translaitarr2/issues">Issues &amp; ideas</a> · <a href="https://github.com/trelowney/translaitarr2/releases">Releases</a></span>
+  </div>
+</footer>
+
+<script>
+  // Cycle the demo cue through a few target languages, like the app's boot splash.
+  (() => {
+    const out = document.getElementById("cue-out"), tag = document.getElementById("cue-lang");
+    const langs = [
+      ["CS", "Říkal jsem ti, ať ty dveře neotvíráš."],
+      ["DE", "Ich habe dir gesagt, du sollst die Tür nicht öffnen."],
+      ["ES", "Te dije que no abrieras esa puerta."],
+      ["FR", "Je t'avais dit de ne pas ouvrir cette porte."],
+      ["PL", "Mówiłem ci, żebyś nie otwierał tych drzwi."],
+      ["IT", "Ti avevo detto di non aprire quella porta."],
+    ];
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let i = 0;
+    setInterval(() => {
+      out.classList.add("fade");
+      setTimeout(() => {
+        i = (i + 1) % langs.length;
+        tag.textContent = "EN → " + langs[i][0];
+        out.textContent = langs[i][1];
+        out.classList.remove("fade");
+      }, 450);
+    }, 3200);
+  })();
+</script>
+</body>
+</html>
