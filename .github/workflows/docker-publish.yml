@@ -1,13 +1,14 @@
 name: Build & publish Docker image
 
-# Builds a multi-arch image and pushes it to GitHub Container Registry (ghcr.io).
-# Triggers (same model as Lingarr):
-#   - push to main        -> refreshes the :latest (edge) tag between releases
-#   - a published Release  -> publishes :X.Y.Z, :X.Y, :X and :latest from the tag
-#   - manual run            -> workflow_dispatch button in the Actions tab
+# Builds a multi-arch image (amd64 + arm64) and pushes it to GitHub Container Registry.
+# Triggers:
+#   - a published Release -> ONE build publishing :X.Y.Z, :X.Y, :X and :latest from the tag
+#   - manual run           -> workflow_dispatch button in the Actions tab (on main it
+#                             refreshes :latest, e.g. to pick up a patched base image)
+# Pushes to main no longer build: releasing used to build the same image twice (once for
+# the push, once for the release), emulating arm64 twice. :latest now always means the
+# latest release, which is also what Watchtower users expect.
 on:
-  push:
-    branches: [main]
   release:
     types: [published]
   workflow_dispatch:
