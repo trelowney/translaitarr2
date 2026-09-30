@@ -33,6 +33,8 @@ SECRET_PATHS = (
     ("arr", "radarr", "api_key"),
     ("auth", "password_hash"),
     ("api", "key"),
+    ("mediaserver", "api_key"),
+    ("webhook", "token"),
 )
 
 DEFAULTS = {
@@ -159,6 +161,15 @@ DEFAULTS = {
     # Stored like the other keys in this file; redacted from logs and /status, and only
     # revealed to a signed-in session on request (Settings → Security → Show / Copy).
     "api": {"key": "", "key_created": ""},
+    # Media server to nudge after a subtitle is written or removed, so it shows up
+    # without waiting for the next library scan. kind: "" (off) | jellyfin | emby.
+    # remap: [{"from": local_prefix, "to": server_prefix}] when paths differ.
+    "mediaserver": {"kind": "", "url": "", "api_key": "", "remap": []},
+    # Notifications (Settings → Notifications), see notify.py for the shape.
+    "notifications": [],
+    # Optional Sonarr/Radarr "On Import" webhook: queue a new file right away instead
+    # of waiting for the next automation scan. The token is part of the URL.
+    "webhook": {"enabled": False, "token": ""},
     "translation": {
         "api_timeout": 1200,
         "max_output_tokens": 65536,
@@ -293,6 +304,15 @@ def load_config():
     for k in ("key", "key_created"):
         if not isinstance(cfg["api"].get(k), str):
             cfg["api"][k] = ""
+    # Media server / notifications / import webhook (added in 0.1.11): same repair
+    # for hand-edited values of the wrong type; older configs get them from DEFAULTS.
+    for k in ("mediaserver", "webhook"):
+        if not isinstance(cfg.get(k), dict):
+            cfg[k] = copy.deepcopy(DEFAULTS[k])
+    if not isinstance(cfg["mediaserver"].get("remap"), list):
+        cfg["mediaserver"]["remap"] = []
+    if not isinstance(cfg.get("notifications"), list):
+        cfg["notifications"] = []
     # Environment / secrets override the file.
     for name, path in ENV_OVERRIDES.items():
         val = _env_value(name)
@@ -315,10 +335,13 @@ def config_exists():
 
 def redact(cfg):
     """Deep copy with every secret replaced by a placeholder, for UI/logs."""
+    import notify  # local: notify owns which notifier fields are secret
+
     safe = copy.deepcopy(cfg)
     for path in SECRET_PATHS:
         if _get_path(safe, path):
             _set_path(safe, path, "********")
+    safe["notifications"] = notify.redact(safe.get("notifications"))
     return safe
 
 

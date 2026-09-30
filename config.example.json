@@ -111,5 +111,14 @@
     "max_chars": 200,
     "min_duration_ms": 100,
     "max_duration_s": 15
-  }
+  },
+
+  "_mediaserver_comment": "Optional. Refresh a title after a subtitle is written/removed. kind: \"\" (off) | jellyfin | emby | plex. api_key = Jellyfin/Emby API key or Plex X-Plex-Token. remap only if the server sees your media under a different folder: [{\"from\": \"/data\", \"to\": \"/media\"}].",
+  "mediaserver": {"kind": "", "url": "", "api_key": "", "remap": []},
+
+  "_notifications_comment": "Set up in Settings → Notifications. Each entry: {id, service, name, fields, events}; services: pushover, discord, telegram, ntfy, gotify, slack, webhook, apprise. events: translated, failed, verify_issues, exhausted.",
+  "notifications": [],
+
+  "_webhook_comment": "Optional Sonarr/Radarr import webhook. Turn it on in Settings → Automation, which generates the token (part of the URL).",
+  "webhook": {"enabled": false, "token": ""}
 }

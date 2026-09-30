@@ -223,6 +223,9 @@ label{ display:block; font-weight:600; margin:13px 0 5px; font-size:12.5px; }
 .secret-msg{ flex-basis:100%; }
 .test-msg, .autosave-status{ font-weight:600; }
 
+/* These cards toggle buttons/rows with the hidden attribute; buttons and .model-add
+   set display themselves, which would otherwise override [hidden]. */
+#set-mediaserver [hidden], #set-webhook [hidden], #set-notifications [hidden]{ display:none !important; }
 .remap-table, .examples table.kv{ width:100%; border-collapse:collapse; }
 .remap-table th, .remap-table td{ text-align:left; padding:8px 10px; border-bottom:1px solid var(--line-soft); }
 .remap-table th{ color:var(--faint); font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:.1em; }

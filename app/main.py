@@ -29,11 +29,14 @@ from flask import (
 import arr
 import config as cfgmod
 import db
+import mediaserver
+import notify
 import scanner
 import stats
 import telemetry
 import translator
 import version
+import webhook
 import worker
 
 # ── Logging (stdout for `docker logs` + a file in the config volume) ──────────
@@ -94,7 +97,8 @@ PROVIDER_LABELS = {
     "gtranslate_free": "Google Translate (free)", "mymemory": "MyMemory (free)",
 }
 
-PUBLIC_ENDPOINTS = {"health", "static", "login", "setup", "setup_submit", "favicon"}
+PUBLIC_ENDPOINTS = {"health", "static", "login", "setup", "setup_submit", "favicon",
+                    "arr_webhook"}  # arr_webhook checks its own URL token
 # JS helper endpoints the setup wizard needs before a config/auth exists.
 WIZARD_API = {"arr_test", "gemini_models", "gemini_test",
               "openrouter_models", "openrouter_test",
@@ -837,6 +841,9 @@ def clear_log():
 @app.route("/settings")
 def settings():
     return render_template("settings.html", cfg=cfgmod.redact(cfgmod.load_config()),
+                           notify_services=notify.schema(), notify_events=notify.EVENTS,
+                           notify_default_events=notify.DEFAULT_EVENTS,
+                           mediaserver_kinds=mediaserver.KINDS,
                            default_prompt=translator.DEFAULT_LLM_PROMPT,
                            all_providers=[(p, PROVIDER_LABELS.get(p, p)) for p in translator.PROVIDERS],
                            active="settings")
@@ -931,6 +938,17 @@ def _apply_lang_model_fields(cfg, f):
                            "model_daily_limit", require_present=True)
 
 
+def _parse_remap(text):
+    """Path rules, one "from => to" per line."""
+    rules = []
+    for line in (text or "").splitlines():
+        if "=>" in line:
+            a, b = line.split("=>", 1)
+            if a.strip() and b.strip():
+                rules.append({"from": a.strip(), "to": b.strip()})
+    return rules
+
+
 @app.route("/settings", methods=["POST"], endpoint="settings_save")
 def settings_save():
     cfg = cfgmod.load_config()
@@ -989,13 +1007,7 @@ def settings_save():
         cfg["sdh"][k] = f.get(f"sdh_{k}") == "on"
 
     # Path remap rules — one "arr_path => local_path" per line.
-    remap = []
-    for line in f.get("path_remap", "").splitlines():
-        if "=>" in line:
-            a, b = line.split("=>", 1)
-            if a.strip() and b.strip():
-                remap.append({"from": a.strip(), "to": b.strip()})
-    cfg["paths"]["remap"] = remap
+    cfg["paths"]["remap"] = _parse_remap(f.get("path_remap", ""))
 
     cfg["validation"]["enabled"] = f.get("validation_enabled") == "on"
     for k in ("min_chars", "max_chars", "min_duration_ms", "max_duration_s"):
@@ -1017,6 +1029,13 @@ def settings_save():
             cfg[p]["glossary"] = f.get(f"{p}_glossary", "")
 
     cfg["telemetry"]["enabled"] = f.get("telemetry_enabled") == "on"
+
+    # Media server refresh (the API key has its own Save button like the others).
+    if "mediaserver_kind" in f:
+        kind = f.get("mediaserver_kind", "")
+        cfg["mediaserver"]["kind"] = kind if kind in mediaserver.KINDS else ""
+        cfg["mediaserver"]["url"] = f.get("mediaserver_url", "").strip()
+        cfg["mediaserver"]["remap"] = _parse_remap(f.get("mediaserver_remap", ""))
 
     cfgmod.save_config(cfg)
     # Auto-save (fetch) requests get a quiet 204; full form posts redirect.
@@ -1065,6 +1084,7 @@ SECRET_FIELDS = {
     "google_api_key": ("google", "api_key"),
     "azure_api_key": ("azure", "api_key"),
     "yandex_api_key": ("yandex", "api_key"),
+    "mediaserver_api_key": ("mediaserver", "api_key"),
 }
 
 
@@ -1084,6 +1104,99 @@ def save_secret():
     node[path[-1]] = value
     cfgmod.save_config(cfg)
     return jsonify({"ok": True, "message": "Saved"})
+
+
+# ── Media server, notifications, import webhook ───────────────────────────────
+def _fetch_only():
+    """Settings JSON endpoints: only our own fetch() calls. The custom header can't be
+    sent cross-site without a CORS preflight, which this app never grants."""
+    if request.headers.get("X-Requested-With") != "fetch":
+        return jsonify({"ok": False, "message": "Bad request"}), 400
+    return None
+
+
+@app.route("/api/mediaserver/test", methods=["POST"], endpoint="mediaserver_test")
+def mediaserver_test():
+    bad = _fetch_only()
+    if bad:
+        return bad
+    data = request.get_json(silent=True) or {}
+    saved = cfgmod.load_config()["mediaserver"]
+    key = (data.get("api_key") or "").strip() or saved.get("api_key", "")
+    ok, message = mediaserver.test(data.get("kind", ""), (data.get("url") or "").strip(), key)
+    return jsonify({"ok": ok, "message": message})
+
+
+@app.route("/api/notifications/<action>", methods=["POST"], endpoint="notifications_api")
+def notifications_api(action):
+    """save (add/update one), delete, test. Test uses the unsaved form values, with
+    masked secrets filled in from the stored notifier of the same id."""
+    bad = _fetch_only()
+    if bad:
+        return bad
+    data = request.get_json(silent=True) or {}
+    cfg = cfgmod.load_config()
+    items = cfg.get("notifications") or []
+    existing = next((n for n in items if n.get("id") == data.get("id")), None)
+    if action == "delete":
+        cfg["notifications"] = [n for n in items if n.get("id") != data.get("id")]
+        cfgmod.save_config(cfg)
+        return jsonify({"ok": True})
+    if action not in ("save", "test"):
+        return jsonify({"ok": False, "message": "Unknown action"}), 400
+    n, err = notify.merge_incoming(data, existing)
+    if err:
+        return jsonify({"ok": False, "message": err}), 400
+    if action == "test":
+        ok, message = notify.test(n)
+        return jsonify({"ok": ok, "message": message})
+    cfg["notifications"] = ([x if x.get("id") != n["id"] else n for x in items]
+                            if existing else items + [n])
+    cfgmod.save_config(cfg)
+    return jsonify({"ok": True, "notifier": notify.redact([n])[0]})
+
+
+@app.route("/settings/webhook", methods=["POST"], endpoint="settings_webhook")
+def settings_webhook():
+    """enable (generates the URL token) / reveal / disable the import webhook."""
+    bad = _fetch_only()
+    if bad:
+        return bad
+    action = (request.get_json(silent=True) or {}).get("action")
+    cfg = cfgmod.load_config()
+    wh = cfg["webhook"]
+    if action == "enable":
+        wh["token"] = secrets.token_hex(16)
+        wh["enabled"] = True
+        cfgmod.save_config(cfg)
+        log.info("Import webhook enabled (a previous URL, if any, no longer works)")
+    elif action == "disable":
+        wh["token"], wh["enabled"] = "", False
+        cfgmod.save_config(cfg)
+        log.info("Import webhook disabled")
+        return jsonify({"ok": True})
+    elif action != "reveal":
+        return jsonify({"ok": False, "message": "Unknown action"}), 400
+    if not (wh.get("enabled") and wh.get("token")):
+        return jsonify({"ok": False, "message": "The webhook is off"}), 404
+    resp = jsonify({"ok": True, "path": url_for("arr_webhook", token=wh["token"])})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.route("/api/webhook/<token>", methods=["POST"], endpoint="arr_webhook")
+def arr_webhook(token):
+    cfg = cfgmod.load_config()
+    wh = cfg.get("webhook") or {}
+    stored = wh.get("token") or ""
+    if not (cfg.get("onboarding_completed") and wh.get("enabled") and stored
+            and secrets.compare_digest(token.encode(), stored.encode())):
+        return jsonify({"error": "Unknown webhook"}), 404
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Expected the Sonarr/Radarr webhook JSON"}), 400
+    status, message = webhook.handle(payload, cfg)
+    return jsonify({"ok": True, "message": message}), status
 
 
 # ── Read-only stats for dashboards (Homepage etc.) ────────────────────────────

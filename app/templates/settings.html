@@ -14,7 +14,7 @@
 <div class="topline"><div><div class="eyebrow">Configuration</div><h1>Settings</h1><p class="sub">Most settings save automatically. <b>API keys and the password have their own Save button.</b> Secrets are write-only and shown as ••••. <span id="save-status" class="autosave-status"></span></p></div></div>
 <div class="wrap">
 <div class="subnav">
-  <a data-tab="connections">Connections</a><a data-tab="providers">Providers</a><a data-tab="languages">Languages</a><a data-tab="automation">Automation</a><a data-tab="translation">Translation</a><a data-tab="advanced">Advanced</a><a data-tab="security">Security</a>
+  <a data-tab="connections">Connections</a><a data-tab="providers">Providers</a><a data-tab="languages">Languages</a><a data-tab="automation">Automation</a><a data-tab="notifications">Notifications</a><a data-tab="translation">Translation</a><a data-tab="advanced">Advanced</a><a data-tab="security">Security</a>
 </div>
 
 <form method="post" action="{{ url_for('settings_save') }}" data-autosave id="settings-form">
@@ -34,6 +34,26 @@
     <label>API key <span class="hint">(leave blank to keep current)</span></label>
     {{ secret("radarr_api_key", cfg.arr.radarr.api_key) }}
     <div class="toolbar" style="margin:8px 0"><button type="button" class="small" data-test-arr="radarr">Test connection</button><span class="test-msg hint" data-arr-msg="radarr"></span></div>
+  </div>
+
+  <div class="card" data-sec="connections" id="set-mediaserver">
+    <h2>Media server <span class="hint">— optional</span></h2>
+    <p class="hint">After a subtitle is written (or a stale one removed), tell the media server to re-read that one title, so the subtitle shows up about a minute later instead of after the next library scan.</p>
+    <label>Server</label>
+    <select name="mediaserver_kind" id="ms-kind">
+      <option value="" {{ 'selected' if not cfg.mediaserver.kind }}>None</option>
+      {% for v, l in mediaserver_kinds.items() %}<option value="{{ v }}" {{ 'selected' if cfg.mediaserver.kind == v }}>{{ l }}</option>{% endfor %}
+    </select>
+    <div id="ms-fields" {{ 'hidden' if not cfg.mediaserver.kind }}>
+      <label>URL</label>
+      <input type="text" name="mediaserver_url" value="{{ cfg.mediaserver.url }}" placeholder="http://jellyfin:8096 · http://plex:32400">
+      <label>API key / token <span class="hint">— Jellyfin/Emby: Dashboard → API Keys → +. Plex: your <a href="https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/" target="_blank" rel="noopener">X-Plex-Token</a></span></label>
+      {{ secret("mediaserver_api_key", cfg.mediaserver.api_key) }}
+      <div class="toolbar" style="margin:8px 0"><button type="button" class="small" id="ms-test">Test connection</button><span class="test-msg hint" id="ms-msg"></span></div>
+      <label>Path mapping <span class="hint">— only if the server sees your media under a different folder. One per line: <code>translAItarr2 folder =&gt; server folder</code></span></label>
+      <textarea name="mediaserver_remap" rows="2" spellcheck="false" placeholder="/data =&gt; /media" style="font-size:12.5px">{% for r in cfg.mediaserver.remap %}{{ r.from }} => {{ r.to }}
+{% endfor %}</textarea>
+    </div>
   </div>
 
   {% from "partials/_model_widget.html" import model_widget %}
@@ -388,6 +408,240 @@
   </div>
 
 </form>
+
+<div class="card" id="set-webhook" data-sec="automation">
+  <h2>Import webhook <span class="hint">— optional</span></h2>
+  <p class="hint">Automation finds new files on its scan every few minutes. With this webhook, Sonarr/Radarr tell translAItarr2 right after an import, and a file that needs a subtitle is queued at once. The scan keeps working either way. The URL contains a secret token, so treat it like a password.</p>
+  <p id="wh-state" class="hint" style="margin-top:10px">{% if cfg.webhook.enabled %}<span style="color:var(--green)">●</span> On{% else %}Off{% endif %}</p>
+  <div id="wh-row" {{ '' if cfg.webhook.enabled else 'hidden' }} style="margin-top:10px">
+    <label>Webhook URL</label>
+    <div class="secret">
+      <input type="password" id="wh-url" readonly spellcheck="false" autocomplete="off" value="••••••••••••••••••••••••••••••••" aria-label="Webhook URL (hidden)">
+      <button type="button" class="small" id="wh-show">Show</button>
+      <button type="button" class="small" id="wh-copy">Copy</button>
+    </div>
+    <p class="hint" style="margin-top:8px">In Sonarr and Radarr: <b>Settings → Connect → + → Webhook</b>, tick <b>On Import</b> and <b>On Upgrade</b>, paste the URL, Method <b>POST</b>, then Test. If they run in the same Docker network, use the container name as the host, e.g. <code>http://translaitarr2:9878/…</code>.</p>
+  </div>
+  <div class="model-add" style="margin-top:12px">
+    <button type="button" class="small" id="wh-enable">{{ 'New URL' if cfg.webhook.enabled else 'Turn on' }}</button>
+    <button type="button" class="small" id="wh-disable" {{ '' if cfg.webhook.enabled else 'hidden' }}>Turn off</button>
+    <span id="wh-msg" class="hint"></span>
+  </div>
+</div>
+
+<div class="card" id="set-notifications" data-sec="notifications">
+  <h2>Notifications</h2>
+  <p class="hint">Get a message when something happens, like Sonarr/Radarr's Connect. Pushover, Discord, Telegram, ntfy, Gotify and Slack have a form here; email, Matrix, Signal and 100+ other services work through an <a href="https://github.com/caronc/apprise/wiki" target="_blank" rel="noopener">Apprise URL</a>.</p>
+  <div id="nt-list" style="margin-top:10px"></div>
+  <div id="nt-editor" class="card" hidden style="margin:12px 0 0;background:var(--elev)">
+    <h2 id="nt-ed-title">New notification</h2>
+    <div class="row">
+      <div><label>Service</label><select id="nt-service"></select></div>
+      <div><label>Name</label><input type="text" id="nt-name" maxlength="60"></div>
+    </div>
+    <div id="nt-fields"></div>
+    <label style="margin-top:14px">Send when</label>
+    <div id="nt-events"></div>
+    <div class="model-add" style="margin-top:12px">
+      <button type="button" class="small primary" id="nt-save">Save</button>
+      <button type="button" class="small" id="nt-test">Test</button>
+      <button type="button" class="small" id="nt-cancel">Cancel</button>
+      <button type="button" class="small xbtn" id="nt-delete" hidden>Delete</button>
+      <span id="nt-msg" class="hint"></span>
+    </div>
+  </div>
+  <div class="model-add" id="nt-add-row" style="margin-top:12px">
+    <button type="button" class="small" id="nt-add">+ Add notification</button>
+  </div>
+</div>
+<script id="nt-data" type="application/json">{{ {"items": cfg.notifications, "services": notify_services, "events": notify_events, "defaults": notify_default_events} | tojson }}</script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  function post(url, body) {
+    return fetch(url, {
+      method: "POST", credentials: "same-origin", cache: "no-store",
+      headers: { "Content-Type": "application/json", "X-Requested-With": "fetch" },
+      body: JSON.stringify(body || {})
+    }).then(function (r) { return r.json().catch(function () { return { ok: false, message: "HTTP " + r.status }; }); });
+  }
+  function say(el, ok, text) { el.textContent = (ok ? "✓ " : "✗ ") + text; el.style.color = ok ? "var(--green)" : "var(--red)"; }
+
+  // ── Media server: show fields only when a server is picked; Test button ──
+  var kind = $("ms-kind");
+  if (kind) {
+    kind.addEventListener("change", function () { $("ms-fields").hidden = !kind.value; });
+    $("ms-test").addEventListener("click", function () {
+      var msg = $("ms-msg"); msg.textContent = "Testing…"; msg.style.color = "";
+      post("{{ url_for('mediaserver_test') }}", {
+        kind: kind.value,
+        url: document.querySelector("[name=mediaserver_url]").value,
+        api_key: document.querySelector("[name=mediaserver_api_key]").value
+      }).then(function (d) { say(msg, d.ok, d.message); }).catch(function (e) { say(msg, false, String(e)); });
+    });
+  }
+
+  // ── Import webhook ──
+  var whUrl = $("wh-url"), whMsg = $("wh-msg"), MASK = "••••••••••••••••••••••••••••••••", whPending = null;
+  function whReveal() {
+    if (!whPending) whPending = post("{{ url_for('settings_webhook') }}", { action: "reveal" }).then(function (d) {
+      if (!d.ok) throw new Error(d.message); return location.origin + d.path;
+    }).catch(function (e) { whPending = null; throw e; });
+    return whPending;
+  }
+  function whHide() { whUrl.type = "password"; whUrl.value = MASK; $("wh-show").textContent = "Show"; }
+  function whOn(on) {
+    whPending = null; whHide();
+    $("wh-row").hidden = !on; $("wh-disable").hidden = !on;
+    $("wh-enable").textContent = on ? "New URL" : "Turn on";
+    $("wh-state").innerHTML = on ? '<span style="color:var(--green)">●</span> On' : "Off";
+  }
+  $("wh-show").addEventListener("click", function () {
+    if (whUrl.type === "text") return whHide();
+    whReveal().then(function (u) { whUrl.type = "text"; whUrl.value = u; $("wh-show").textContent = "Hide"; })
+              .catch(function (e) { say(whMsg, false, e.message); });
+  });
+  ["pointerenter", "pointerdown", "touchstart", "focus"].forEach(function (ev) {
+    $("wh-copy").addEventListener(ev, function () { whReveal().catch(function () {}); }, { passive: true });
+  });
+  function legacyCopy(text) {
+    var ta = document.createElement("textarea");
+    ta.value = text; ta.setAttribute("readonly", "");
+    ta.style.cssText = "position:fixed;top:-1000px;left:-1000px;opacity:0";
+    document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, text.length);
+    var ok = false; try { ok = document.execCommand("copy"); } catch (e) {}
+    document.body.removeChild(ta);
+    return ok;
+  }
+  $("wh-copy").addEventListener("click", function () {
+    whReveal().then(function (u) {
+      if (navigator.clipboard && window.isSecureContext) {
+        return navigator.clipboard.writeText(u).then(function () { say(whMsg, true, "Copied"); },
+          function () { legacyCopy(u) ? say(whMsg, true, "Copied") : say(whMsg, false, "Copy blocked by the browser — use Show"); });
+      }
+      legacyCopy(u) ? say(whMsg, true, "Copied") : say(whMsg, false, "Copy blocked by the browser — use Show");
+    }).catch(function (e) { say(whMsg, false, e.message); });
+  });
+  $("wh-enable").addEventListener("click", function () {
+    if (!$("wh-disable").hidden && !confirm("Make a new URL? The current one stops working, so update Sonarr/Radarr.")) return;
+    post("{{ url_for('settings_webhook') }}", { action: "enable" }).then(function (d) {
+      if (!d.ok) return say(whMsg, false, d.message);
+      whOn(true); say(whMsg, true, "Webhook on — use Show or Copy");
+    }).catch(function (e) { say(whMsg, false, String(e)); });
+  });
+  $("wh-disable").addEventListener("click", function () {
+    if (!confirm("Turn the webhook off? Sonarr/Radarr's Webhook connection will start failing until you remove it.")) return;
+    post("{{ url_for('settings_webhook') }}", { action: "disable" }).then(function (d) {
+      if (!d.ok) return say(whMsg, false, d.message);
+      whOn(false); say(whMsg, true, "Webhook off");
+    }).catch(function (e) { say(whMsg, false, String(e)); });
+  });
+
+  // ── Notifications ──
+  var data = JSON.parse($("nt-data").textContent);
+  var items = data.items || [], services = {}, editing = null;
+  data.services.forEach(function (s) { services[s.id] = s; });
+  var list = $("nt-list"), ed = $("nt-editor"), svcSel = $("nt-service"), ntMsg = $("nt-msg");
+  data.services.forEach(function (s) { var o = document.createElement("option"); o.value = s.id; o.textContent = s.label; svcSel.appendChild(o); });
+
+  function renderList() {
+    list.innerHTML = "";
+    if (!items.length) { var p = document.createElement("p"); p.className = "hint"; p.textContent = "No notifications yet."; list.appendChild(p); return; }
+    items.forEach(function (n) {
+      var row = document.createElement("div"); row.className = "model-add"; row.style.marginTop = "6px";
+      var b = document.createElement("button"); b.type = "button"; b.className = "small"; b.textContent = "Edit";
+      b.addEventListener("click", function () { open(n); });
+      var t = document.createElement("span");
+      var on = data.events.filter(function (e) { return n.events && n.events[e[0]]; }).map(function (e) { return e[1]; });
+      t.innerHTML = "<b></b> <span class=\"hint\"></span>";
+      t.firstChild.textContent = n.name;
+      var svc = services[n.service] ? services[n.service].label : n.service;
+      t.lastChild.textContent = (svc !== n.name ? svc + " · " : "") + (on.length ? on.join(", ") : "no events");
+      t.style.flex = "1";
+      row.appendChild(t); row.appendChild(b); list.appendChild(row);
+    });
+  }
+  function renderFields(values) {
+    var box = $("nt-fields"); box.innerHTML = "";
+    services[svcSel.value].fields.forEach(function (f) {
+      var l = document.createElement("label"); l.textContent = f.label + " ";
+      if (f.hint) { var h = document.createElement("span"); h.className = "hint"; h.textContent = "— " + f.hint; l.appendChild(h); }
+      var inp;
+      if (f.kind.indexOf("select:") === 0) {
+        inp = document.createElement("select");
+        f.kind.slice(7).split(",").forEach(function (v) { var o = document.createElement("option"); o.value = v; o.textContent = v.charAt(0).toUpperCase() + v.slice(1); inp.appendChild(o); });
+      } else {
+        inp = document.createElement("input");
+        inp.type = f.kind === "secret" ? "password" : "text";
+        inp.autocomplete = "new-password"; inp.spellcheck = false;
+      }
+      inp.dataset.field = f.name;
+      var v = values && values[f.name];
+      if (v) inp.value = v;
+      box.appendChild(l); box.appendChild(inp);
+    });
+  }
+  function renderEvents(values) {
+    var box = $("nt-events"); box.innerHTML = "";
+    data.events.forEach(function (e) {
+      var d = document.createElement("div"); d.className = "check";
+      d.innerHTML = '<input type="checkbox"><span></span>';
+      d.firstChild.dataset.event = e[0]; d.firstChild.checked = !!values[e[0]];
+      d.lastChild.textContent = e[1];
+      box.appendChild(d);
+    });
+  }
+  function open(n) {
+    editing = n || null;
+    ntMsg.textContent = "";
+    svcSel.value = n ? n.service : "pushover";
+    svcSel.disabled = !!n;
+    $("nt-name").value = n ? n.name : services[svcSel.value].label;
+    $("nt-ed-title").textContent = n ? "Edit notification" : "New notification";
+    $("nt-delete").hidden = !n;
+    renderFields(n ? n.fields : null);
+    renderEvents(n ? n.events : data.defaults);
+    ed.hidden = false; $("nt-add-row").hidden = true;
+  }
+  function close() { ed.hidden = true; $("nt-add-row").hidden = false; editing = null; }
+  function collect() {
+    var fields = {}, events = {};
+    $("nt-fields").querySelectorAll("[data-field]").forEach(function (i) { fields[i.dataset.field] = i.value; });
+    $("nt-events").querySelectorAll("[data-event]").forEach(function (i) { events[i.dataset.event] = i.checked; });
+    return { id: editing ? editing.id : "", service: svcSel.value, name: $("nt-name").value, fields: fields, events: events };
+  }
+  svcSel.addEventListener("change", function () {
+    var prev = Object.keys(services).map(function (k) { return services[k].label; });
+    if (!$("nt-name").value || prev.indexOf($("nt-name").value) >= 0) $("nt-name").value = services[svcSel.value].label;
+    renderFields(null);
+  });
+  $("nt-add").addEventListener("click", function () { open(null); });
+  $("nt-cancel").addEventListener("click", close);
+  $("nt-test").addEventListener("click", function () {
+    ntMsg.textContent = "Sending…"; ntMsg.style.color = "";
+    post("{{ url_for('notifications_api', action='test') }}", collect())
+      .then(function (d) { say(ntMsg, d.ok, d.message); }).catch(function (e) { say(ntMsg, false, String(e)); });
+  });
+  $("nt-save").addEventListener("click", function () {
+    post("{{ url_for('notifications_api', action='save') }}", collect()).then(function (d) {
+      if (!d.ok) return say(ntMsg, false, d.message);
+      var i = items.findIndex(function (x) { return x.id === d.notifier.id; });
+      if (i >= 0) items[i] = d.notifier; else items.push(d.notifier);
+      close(); renderList();
+    }).catch(function (e) { say(ntMsg, false, String(e)); });
+  });
+  $("nt-delete").addEventListener("click", function () {
+    if (!editing || !confirm("Delete this notification?")) return;
+    var id = editing.id;
+    post("{{ url_for('notifications_api', action='delete') }}", { id: id }).then(function (d) {
+      if (!d.ok) return say(ntMsg, false, d.message);
+      items = items.filter(function (x) { return x.id !== id; });
+      close(); renderList();
+    }).catch(function (e) { say(ntMsg, false, String(e)); });
+  });
+  renderList();
+})();
+</script>
 
 <form method="post" action="{{ url_for('settings_auth') }}" class="card" id="set-security" data-sec="security" style="margin-top:0">
   <h2>Security</h2>

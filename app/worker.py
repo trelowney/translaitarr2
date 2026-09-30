@@ -12,6 +12,8 @@ import time
 import config as cfgmod
 import db
 import media
+import mediaserver
+import notify
 import scanner
 import translator
 
@@ -83,6 +85,10 @@ def _verify_note(r):
     return "\n".join(f"• {f['source']}  →  {f['translation']}" for f in flagged)
 
 
+def _verify_issues(r):
+    return not r.get("ok") and "bad" in r
+
+
 def start():
     """Start the worker + automation threads once (idempotent)."""
     global _started
@@ -123,6 +129,7 @@ def _loop():
             time.sleep(secs)
             continue
 
+        name = title or os.path.basename(path)
         _job_log.start()
         _active_job["id"] = job_id
         log.info("Job %s: starting [%s] — %s", job_id, action, title or path)
@@ -135,10 +142,13 @@ def _loop():
                 db.record_calls(model_calls)
                 db.set_status(job_id, "done", result=_verify_label(vres), verify_note=_verify_note(vres))
                 log.info("Job %s: %s", job_id, _verify_label(vres))
+                if _verify_issues(vres):
+                    notify.send(cfg, "verify_issues", "Verification found issues",
+                                f"{name}: {_verify_label(vres)}", file=path)
             else:
                 outcome, model_calls = translator.translate_file(path, cfg, force=force, usage=usage, fails=fails)
                 if outcome == "translated":
-                    extra, note = "", None
+                    extra, note, vres = "", None, None
                     if cfg["translation"].get("verify"):
                         vres, vcalls = translator.verify_translation(path, cfg, usage=usage)
                         for m, n in vcalls.items():
@@ -152,6 +162,11 @@ def _loop():
                     # remove it safely (and only ours) if the release gains the target language.
                     db.record_sidecar(media.target_sidecar_path(path, cfg["languages"]["target"]["code"]))
                     log.info("Job %s: done (today %s/%s)", job_id, total, max_total)
+                    mediaserver.refresh(cfg, path)
+                    notify.send(cfg, "translated", "Subtitle translated", name + extra, file=path)
+                    if vres is not None and _verify_issues(vres):
+                        notify.send(cfg, "verify_issues", "Verification found issues",
+                                    f"{name}: {_verify_label(vres)}", file=path)
                 else:
                     db.set_status(job_id, "done", result=outcome)
                     log.info("Job %s: %s", job_id, outcome)
@@ -159,6 +174,8 @@ def _loop():
         except translator.AllModelsExhaustedError as e:
             log.warning("Job %s: %s — requeuing, sleeping until reset", job_id, e)
             db.set_status(job_id, "pending")
+            notify.send(cfg, "exhausted", "All providers out of quota",
+                        f"Paused until the quota resets. Waiting: {name}", file=path)
             _active_job["id"] = None
             _job_log.stop()
             time.sleep(db.seconds_until_reset(cfg["automation"].get("rpd_reset_tz", "UTC")))
@@ -166,6 +183,7 @@ def _loop():
         except Exception as e:  # noqa: BLE001 - any failure must not kill the worker
             log.error("Job %s FAILED: %s", job_id, e)
             db.set_status(job_id, "error", error=str(e))
+            notify.send(cfg, "failed", "Translation failed", f"{name}: {e}", file=path)
 
         db.set_job_log(job_id, _job_log.text())
         _active_job["id"] = None
@@ -200,6 +218,7 @@ def _cleanup_superseded(rows, cfg):
             os.remove(sidecar)
             db.forget_sidecar(sidecar)
             scanner.invalidate(r["local_path"])
+            mediaserver.refresh(cfg, r["local_path"])
             removed += 1
             log.info("Cleanup: removed superseded %s — release now ships %s natively",
                      os.path.basename(sidecar), name)

@@ -45,7 +45,7 @@ translAItarr2 handles those cases:
 
 - **Web UI (dark, minimal)** — Library (split into Movies / TV Shows), Queue, and Settings.
 - **Native Sonarr/Radarr integration** via their REST API — real series / episode /
-  movie titles, not raw file paths. **No webhook needed.** Path remapping is a guided
+  movie titles, not raw file paths. **No webhook needed** (an optional one exists for instant pickup). Path remapping is a guided
   table that auto-detects your *arr root folders.
 - **First-run setup wizard** — connect Sonarr/Radarr (with Test buttons), add a
   translation provider (e.g. your Gemini key), pick source/target languages, optionally
@@ -63,7 +63,15 @@ translAItarr2 handles those cases:
   per provider with **per-model batch size and daily request limit**, or **override the
   provider per job** from the Library. Tuned out of the box for Gemini's free tier.
 - **Automation** — optional periodic scan that translates anything new; re-translate
-  automatically on a release upgrade, or manually per-title.
+  automatically on a release upgrade, or manually per-title. An optional
+  [import webhook](#import-webhook-optional) lets Sonarr/Radarr hand over new files the moment
+  they're imported.
+- **Media server refresh** — tells **Jellyfin, Emby or Plex** to re-read just that title after a
+  subtitle is written or removed, so it shows up in seconds instead of after the next library scan.
+- **Notifications** — like Sonarr/Radarr's Connect: **Pushover, Discord, Telegram, ntfy, Gotify,
+  Slack**, a plain JSON webhook, or any of 100+ services through an
+  [Apprise](https://github.com/caronc/apprise) URL (email, Matrix, Signal, …). Pick the events per
+  notification: subtitle translated, job failed, verification issues, all providers out of quota.
 - **Optional translation verification** — samples a finished translation and has the
   model check each line's meaning against the source, so it tolerates paraphrase and
   flags only genuinely wrong / untranslated lines; run it automatically or on demand.
@@ -78,9 +86,10 @@ translAItarr2 handles those cases:
   [Homepage](https://gethomepage.dev) so it can show queue and library numbers
   ([setup](#dashboard-integration-homepage)).
 - **Privacy & safety first** — secrets stay in your local config volume, redacted from
-  logs; runs as a non-root user; in-app update check. The only thing that ever leaves your
-  server is an **anonymous instance counter** (a random id + version, once a day) that you
-  can [turn off](#privacy--telemetry) — it carries nothing about you or your library.
+  logs; runs as a non-root user; in-app update check. Apart from the translation engine and
+  any notifications you set up, the only thing that ever leaves your server is an **anonymous
+  instance counter** (a random id + version, once a day) that you can
+  [turn off](#privacy--telemetry) — it carries nothing about you or your library.
 
 ## Roadmap
 
@@ -101,6 +110,7 @@ Where things stand:
 - Optional translation verification — model-judged so it tolerates paraphrase; automatic or on demand
 - Path remapping (UI), in-app update check, multi-arch Docker image
 - Read-only, API-key-protected `GET /api/stats` for dashboards, built for [Homepage](#dashboard-integration-homepage)
+- Media server refresh (Jellyfin / Emby / Plex), notifications (Pushover, Discord, Telegram, ntfy, Gotify, Slack, webhook, Apprise), optional Sonarr/Radarr import webhook
 
 **Planned (later)**
 - UI translations (i18n) — only if the community asks for it; then community-driven via Weblate (the app stays English-first, like Bazarr/Lingarr)
@@ -186,7 +196,9 @@ every field. Highlights:
 | Languages   | Source-language priority order, and your single target language.        |
 | SDH         | Strip captions/sound effects/speaker labels before translating.         |
 | Limits      | Daily per-model and total request caps; max titles per automation run.  |
-| Automation  | On/off and scan interval.                                               |
+| Automation  | On/off and scan interval; optional Sonarr/Radarr import webhook.        |
+| Media server | Jellyfin / Emby / Plex to refresh after a subtitle changes (URL + key/token, optional path mapping). |
+| Notifications | Any number of notifications, each with its own service and events.   |
 | Translation | Timeout, retries, context window, optional translator credit line.      |
 | Validation  | Min/max cue length and duration sanity checks on the output.            |
 
@@ -244,6 +256,15 @@ Tune the global **`batch_size`** in Settings, and override per model via
 `gemini.model_batch` in config. As a feel: a typical 700–900-cue film translates in
 ~4–6 requests at batch 150–200. Google changes quotas often — check your current
 limits in Google AI Studio.
+
+### Import webhook (optional)
+
+Automation already finds new files on its scan. If you want them picked up the moment they're
+imported, turn on **Settings → Automation → Import webhook** and copy its URL. Then in Sonarr and
+Radarr add **Settings → Connect → + → Webhook**, tick **On Import** and **On Upgrade**, paste the
+URL (Method `POST`) and press Test. The URL carries a secret token; **New URL** replaces it and
+**Turn off** disables the endpoint. Only import/upgrade events do anything, and a file that
+already has your target language is left alone.
 
 ### Secrets
 
