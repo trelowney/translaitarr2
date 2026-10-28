@@ -164,6 +164,52 @@ def _sort_sup(sup_path):
     return moved
 
 
+# Characters Tesseract returns for a "♪" glyph. A leading "J" only counts as a note when
+# the subtitle also ends with one ("J Money" is a name); a lone lowercase "f", "~" or "¢"
+# never starts real dialogue, so an opening note is enough for those.
+_OCR_NOTE_ALONE = {"A", "i", "f", "J", "¢", "~", "#", "Jf", "fJ", "f J", "J f", "♫"}
+_OCR_NOTE_OPEN = re.compile(r"^(?P<dash>-\s*)?(?P<note>[f¢J~#♪])\s+(?=\S)")
+_OCR_NOTE_CLOSE = re.compile(r"(?<=\S)\s+[f¢J~#♪S]$")
+
+
+def _restore_ocr_music_notes(srt_path):
+    """Turn music notes that OCR read as letters back into "♪", so SDH removal can
+    drop lone notes and song lines keep their markers. Returns how many were fixed."""
+    with open(srt_path, encoding="utf-8") as f:
+        blocks = re.split(r"\n\s*\n", f.read().replace("\r", "").strip())
+    fixed, out = 0, []
+    for block in blocks:
+        lines = block.split("\n")
+        if len(lines) >= 3 and "-->" in lines[1]:
+            body = [ln.strip() for ln in lines[2:]]
+            if len(body) == 1 and body[0] in _OCR_NOTE_ALONE:
+                body, fixed = ["♪"], fixed + 1
+            else:
+                for i, line in enumerate(body):  # a note on both ends of one line
+                    o, c = _OCR_NOTE_OPEN.match(line), _OCR_NOTE_CLOSE.search(line)
+                    if o and c and o.end() < c.start():
+                        body[i] = (o.group("dash") or "") + "♪ " + line[o.end():c.start()] + " ♪"
+                        fixed += 1
+                opens = _OCR_NOTE_OPEN.match(body[0])
+                closes = _OCR_NOTE_CLOSE.search(body[-1])
+                dialogue = any(ln.startswith("-") for ln in body[1:])
+                if opens and not dialogue and (closes or opens.group("note") in "f¢~"):
+                    # a song line that runs over the whole subtitle
+                    body[0] = (opens.group("dash") or "") + "♪ " + body[0][opens.end():]
+                    body[-1] = _OCR_NOTE_CLOSE.sub("", body[-1]) + " ♪"
+                    fixed += 1
+                for i, line in enumerate(body):  # closing note of a verse begun earlier
+                    if re.search(r"\w\W?\s+[fJ¢~]$", line):
+                        body[i] = line[:-1].rstrip() + " ♪"
+                        fixed += 1
+            lines = lines[:2] + body
+        out.append("\n".join(lines))
+    if fixed:
+        with open(srt_path, "w", encoding="utf-8") as f:
+            f.write("\n\n".join(out) + "\n\n")
+    return fixed
+
+
 def ocr_pgs_to_srt(file_path, stream_idx, src_lang_code, out_path, tmp_dir):
     """Extract a PGS (Blu-ray bitmap) subtitle stream and OCR it to text SRT via
     pgsrip + Tesseract, so the rest of the pipeline is unchanged."""
@@ -198,6 +244,9 @@ def ocr_pgs_to_srt(file_path, stream_idx, src_lang_code, out_path, tmp_dir):
     shutil.move(str(produced[0]), out_path)
     n = count_entries(out_path)
     log.info("OCR done: %s entries recognized (%s B)", n, os.path.getsize(out_path))
+    fixed = _restore_ocr_music_notes(out_path)
+    if fixed:
+        log.info("OCR: restored %s music note(s) misread as letters", fixed)
     if n == 0:
         raise RuntimeError("OCR produced an empty SRT")
     return n
