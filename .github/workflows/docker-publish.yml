@@ -28,11 +28,14 @@ concurrency:
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write          # needed to push to ghcr.io
     steps:
+      # Silences git's "default branch name" hint in the checkout log.
+      - run: git config --global init.defaultBranch main
+
       - uses: actions/checkout@v6
 
       - name: Set up QEMU (for arm64 emulation)
