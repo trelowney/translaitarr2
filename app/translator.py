@@ -146,6 +146,30 @@ def ocr_pgs_to_srt(file_path, stream_idx, src_lang_code, out_path, tmp_dir):
 
 # ── SDH removal ───────────────────────────────────────────────────────────────
 
+def _drop_tag_only_lines(lines):
+    """After SDH removal a line can be left with nothing but formatting ("<i></i>" from a
+    stripped song, a lone "<i>" from "<i>- [giggling]"). Drop such lines and hand their
+    tags to the neighbouring text line, so the cue reads the same and a cue with no text
+    at all is removed instead of being sent for translation as an empty line."""
+    def tags_only(s):
+        return not re.sub(r"</?[a-zA-Z][^>]*>|[\s,\-\.]", "", s)
+    out, carry = [], ""
+    for line in lines:
+        if tags_only(line):
+            opening = "".join(re.findall(r"<[a-zA-Z][^>]*>", line))
+            closing = "".join(re.findall(r"</[a-zA-Z][^>]*>", line))
+            if opening and closing:
+                continue  # self-contained "<i></i>" — nothing to carry
+            if closing and out:
+                out[-1] += closing
+            else:
+                carry += opening
+            continue
+        out.append(carry + line)
+        carry = ""
+    return out
+
+
 def remove_sdh(src_path, dst_path, sdh):
     do_brackets = sdh.get("brackets", True)
     do_parens = sdh.get("parens", True)
@@ -182,7 +206,7 @@ def remove_sdh(src_path, dst_path, sdh):
             line = re.sub(r"^[\s,\-\.]+|[\s,\-\.]+$", "", line)
             if line:
                 out.append(line)
-        return out
+        return _drop_tag_only_lines(out)
 
     kept, removed = [], 0
     for _, tc, text in parse_srt(src_path):
