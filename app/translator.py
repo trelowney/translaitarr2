@@ -66,11 +66,33 @@ def parse_srt(path):
 
 
 def count_entries(path):
-    # Count real cues, not digit-only lines — dialogue like "64" would inflate it.
+    # Count real cues, not digit-only lines — stray cue numbers inside the text would inflate it.
     try:
         return len(parse_srt(path))
     except OSError:
         return 0
+
+
+def strip_stray_indices(path):
+    """Some badly muxed SRT tracks carry the original cue number as the first text
+    line ("473\\nI never made a turn…"). The model then translates it as a line of
+    its own and shifts the rest of the batch. Strip them only when the pattern is
+    unmistakable: first line of a multi-line cue, at least 5 of them, strictly
+    increasing through the file — a real line like "64" never looks like that."""
+    entries = parse_srt(path)
+    hits = [i for i, (_, _, text) in enumerate(entries)
+            if len(text) >= 2 and re.fullmatch(r"\d{1,5}", text[0].strip())]
+    nums = [int(entries[i][2][0]) for i in hits]
+    if len(hits) < 5 or any(b <= a for a, b in zip(nums, nums[1:])):
+        return 0
+    for i in hits:
+        n, tc, text = entries[i]
+        entries[i] = (n, tc, text[1:])
+    with open(path, "w", encoding="utf-8") as f:
+        for n, tc, text in entries:
+            f.write(f"{n}\n{tc}\n" + "\n".join(text) + "\n\n")
+    log.info("Stray cue numbers: stripped %s", len(hits))
+    return len(hits)
 
 
 # ── Extraction / OCR ──────────────────────────────────────────────────────────
@@ -1141,6 +1163,7 @@ def translate_file(file_path, cfg, force=False, usage=None, fails=None):
             ocr_pgs_to_srt(file_path, stream_idx, src_lang_code, raw_srt, tmp)
         else:
             extract_subtitle(file_path, stream_idx, raw_srt)
+        strip_stray_indices(raw_srt)
 
         sdh = cfg.get("sdh", {})
         if any(sdh.get(k) for k in ("brackets", "parens", "music", "speaker", "uppercase")):
