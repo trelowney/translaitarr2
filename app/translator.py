@@ -54,7 +54,7 @@ class AllModelsExhaustedError(Exception):
 # ── SRT helpers ───────────────────────────────────────────────────────────────
 
 def parse_srt(path):
-    with open(path, encoding="utf-8", errors="replace") as f:
+    with open(path, encoding="utf-8-sig", errors="replace") as f:
         content = f.read()
     entries = []
     for block in re.split(r"\n\s*\n", content.strip()):
