@@ -109,6 +109,59 @@ def extract_subtitle(file_path, stream_idx, out_path):
     log.info("Extracted %s entries (%s B)", count_entries(out_path), os.path.getsize(out_path))
 
 
+def _mkvextract_pgs(file_path, stream_idx, sup_path):
+    """Extract a PGS track from an MKV with mkvextract. Some releases store a "clear"
+    segment out of timestamp order; ffmpeg's .sup muxer then bumps the following display
+    sets up to that time, so several lines get the same start and a 1 ms duration and are
+    dropped as junk. mkvextract writes the original timestamps. Returns False when the
+    file is not an MKV or the track can't be matched, so the caller falls back to ffmpeg."""
+    if Path(file_path).suffix.lower() not in (".mkv", ".mka", ".mks"):
+        return False
+    try:
+        r = subprocess.run(["mkvmerge", "-J", file_path], capture_output=True, text=True)
+        tracks = json.loads(r.stdout).get("tracks", []) if r.returncode in (0, 1) else []
+    except (OSError, ValueError):
+        return False
+    # mkvmerge numbers tracks in file order, like ffmpeg's stream index for MKV.
+    track = next((t for t in tracks if t.get("id") == int(stream_idx)), None)
+    if not track or "PGS" not in str(track.get("codec", "")):
+        return False
+    log.info("mkvextract: extracting PGS track %s -> %s", stream_idx, Path(sup_path).name)
+    r = subprocess.run(["mkvextract", "tracks", file_path, f"{stream_idx}:{sup_path}"],
+                       capture_output=True, text=True)
+    if r.returncode not in (0, 1) or not os.path.exists(sup_path):
+        log.warning("mkvextract failed, falling back to ffmpeg: %s", (r.stdout or r.stderr).strip()[-200:])
+        return False
+    return True
+
+
+def _sort_sup(sup_path):
+    """Reorder the display sets of a .sup file by timestamp. Some releases store a few
+    of them out of order, and pgsrip pairs each one with whatever follows it in the file,
+    giving lines a 1 ms or 20 s duration. Returns how many sets were out of order."""
+    with open(sup_path, "rb") as f:
+        data = f.read()
+    sets, cur, i = [], [], 0
+    while i + 13 <= len(data):
+        if data[i:i + 2] != b"PG":
+            return 0  # not a plain PGS stream — leave it alone
+        seg_type, size = data[i + 10], int.from_bytes(data[i + 11:i + 13], "big")
+        cur.append(data[i:i + 13 + size])
+        i += 13 + size
+        if seg_type == 0x80:  # END segment closes a display set
+            sets.append(cur)
+            cur = []
+    if cur:
+        sets.append(cur)
+    pts = [int.from_bytes(s[0][2:6], "big") for s in sets]
+    moved = sum(1 for a, b in zip(pts, pts[1:]) if b < a)
+    if moved:
+        order = sorted(range(len(sets)), key=lambda k: pts[k])
+        with open(sup_path, "wb") as f:
+            f.write(b"".join(seg for k in order for seg in sets[k]))
+    return moved
+
+
 def ocr_pgs_to_srt(file_path, stream_idx, src_lang_code, out_path, tmp_dir):
     """Extract a PGS (Blu-ray bitmap) subtitle stream and OCR it to text SRT via
     pgsrip + Tesseract, so the rest of the pipeline is unchanged."""
@@ -116,14 +169,18 @@ def ocr_pgs_to_srt(file_path, stream_idx, src_lang_code, out_path, tmp_dir):
     # pgsrip reads the track language from the filename — the alpha-2 code must be
     # in it (e.g. track.en.sup) or it filters the track out.
     sup_path = os.path.join(tmp_dir, f"track.{fname_lang}.sup")
-    log.info("ffmpeg: extracting PGS stream %s -> %s", stream_idx, Path(sup_path).name)
-    r = subprocess.run(
-        ["ffmpeg", "-loglevel", "error", "-i", file_path,
-         "-map", f"0:{stream_idx}", "-c:s", "copy", sup_path, "-y"],
-        capture_output=True, text=True,
-    )
-    if r.returncode != 0:
-        raise RuntimeError(f"ffmpeg PGS extract failed: {r.stderr.strip()}")
+    if not _mkvextract_pgs(file_path, stream_idx, sup_path):
+        log.info("ffmpeg: extracting PGS stream %s -> %s", stream_idx, Path(sup_path).name)
+        r = subprocess.run(
+            ["ffmpeg", "-loglevel", "error", "-i", file_path,
+             "-map", f"0:{stream_idx}", "-c:s", "copy", sup_path, "-y"],
+            capture_output=True, text=True,
+        )
+        if r.returncode != 0:
+            raise RuntimeError(f"ffmpeg PGS extract failed: {r.stderr.strip()}")
+    moved = _sort_sup(sup_path)
+    if moved:
+        log.info("PGS: reordered %s out-of-order display sets", moved)
 
     log.info("OCR: pgsrip + Tesseract (lang=%s)…", ocr_lang)
     r = subprocess.run(
