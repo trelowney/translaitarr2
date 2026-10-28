@@ -66,9 +66,9 @@ def parse_srt(path):
 
 
 def count_entries(path):
+    # Count real cues, not digit-only lines — dialogue like "64" would inflate it.
     try:
-        with open(path, encoding="utf-8", errors="replace") as f:
-            return sum(1 for line in f if re.match(r"^\d+\s*$", line))
+        return len(parse_srt(path))
     except OSError:
         return 0
 
