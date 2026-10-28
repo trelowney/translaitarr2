@@ -187,6 +187,10 @@ DEFAULTS = {
         # language and flag dubious jobs. Costs one extra request per job.
         "verify": False,
         "verify_samples": 8,
+        # After translating, back-translate the result with the free Google endpoint
+        # and re-translate stretches whose lines slipped by one. Skipped when Google
+        # is unavailable or rate-limiting.
+        "meaning_check": True,
         # When a release is upgraded and the new file already carries the target
         # language (embedded audio or subtitle), delete the now-stale sidecar we
         # translated earlier. Only ever removes subtitles translAItarr2 created.

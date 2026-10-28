@@ -1226,11 +1226,11 @@ def _cue_features(text):
     s = _plain(text)
     return {
         "n": len(re.sub(r"\W", "", s)),
-        "q": "?" in s,
+        "q": any(c in s for c in "?？؟"),
         "end": s.rstrip().endswith(("...", "…")),
         "start": s.lstrip("- ").startswith(("...", "…")),
-        "names": [w for w in re.findall(r"(?<![.!?\n-]\s)(?<!^)\b([A-Z][a-z]{3,})", s)
-                  if w not in _NAME_STOP],
+        "names": [w for w in re.findall(r"(?<![.!?\n-]\s)(?<!^)\b([^\W\d_]{4,})", s)
+                  if w[0].isupper() and w[1:].islower() and w not in _NAME_STOP],
         "words": re.findall(r"\w+", s),
     }
 
@@ -1272,22 +1272,155 @@ def find_shifted_windows(src_texts, trl_texts):
         if len(a) >= 12 and a == b and difflib.SequenceMatcher(
                 None, _plain(src_texts[j]).lower(), _plain(src_texts[j + 1]).lower()).ratio() < 0.6:
             bad.update((j, j + 1))
-    windows = []
-    for j in sorted(bad):
-        if windows and j <= windows[-1][1] + 2:
-            windows[-1][1] = j
+    return _ranges(bad)
+
+
+# Back-translation ("meaning check"): the surface signals above miss a shift when the
+# moved lines have similar length and no question marks or names. Translating the result
+# back to the source language shows which source line each translated line really says.
+# Uses the keyless Google endpoint; quality is irrelevant, only shared words count.
+_ISO2 = {"eng": "en", "cze": "cs", "ces": "cs", "slo": "sk", "slk": "sk", "fre": "fr", "fra": "fr",
+         "ger": "de", "deu": "de", "spa": "es", "ita": "it", "por": "pt", "pol": "pl", "dut": "nl",
+         "nld": "nl", "rus": "ru", "ukr": "uk", "hun": "hu", "rum": "ro", "ron": "ro", "bul": "bg",
+         "hrv": "hr", "srp": "sr", "slv": "sl", "gre": "el", "ell": "el", "tur": "tr", "swe": "sv",
+         "dan": "da", "nor": "no", "nob": "no", "fin": "fi", "est": "et", "lav": "lv", "lit": "lt",
+         "heb": "iw", "ara": "ar", "per": "fa", "fas": "fa", "hin": "hi", "tha": "th", "vie": "vi",
+         "ind": "id", "may": "ms", "msa": "ms", "fil": "tl", "tgl": "tl", "jpn": "ja", "kor": "ko",
+         "chi": "zh-CN", "zho": "zh-CN"}
+_NO_SPACES = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\u0e00-\u0e7f]")
+_bt_blocked_until = 0.0
+
+
+def _google_code(code):
+    """Language code (ISO 639-1/2, optionally with a region) -> Google code, or None."""
+    c = (code or "").strip()
+    c = _ISO2.get(c.lower(), c)
+    if c.lower().startswith("zh"):
+        return "zh-TW" if c.lower() in ("zh-tw", "zh-hant", "zh-hk") else "zh-CN"
+    c = re.split(r"[-_]", c)[0].lower()
+    return c if c.isalpha() and 2 <= len(c) <= 3 else None
+
+
+def _one_line(text):
+    return re.sub(r"\s+", " ", _plain(text)).strip()
+
+
+def _backtranslate(texts, from_code, to_code, cfg):
+    """Translate texts with the free Google endpoint, many lines per request. Returns
+    the list, or None when the check has to be skipped (unknown language, network
+    error, rate limit). After a rate limit Google is left alone for an hour."""
+    global _bt_blocked_until
+    sl, tl = _google_code(from_code), _google_code(to_code)
+    if not sl or not tl or sl == tl or time.time() < _bt_blocked_until:
+        return None
+    done, todo = {}, [t for t in dict.fromkeys(texts) if t]
+    i = 0
+    while i < len(todo):
+        batch, size = [], 0
+        while i + len(batch) < len(todo) and size + len(todo[i + len(batch)]) < 3500:
+            size += len(todo[i + len(batch)]) + 1
+            batch.append(todo[i + len(batch)])
+        batch = batch or [todo[i][:3500]]
+        try:
+            r = requests.post("https://translate.googleapis.com/translate_a/single",
+                              params={"client": "gtx", "sl": sl, "tl": tl, "dt": "t"},
+                              data={"q": "\n".join(batch)}, timeout=30)
+        except requests.RequestException as e:
+            log.info("Meaning check: skipped — Google unreachable (%s)", e.__class__.__name__)
+            return None
+        if r.status_code == 429:
+            _bt_blocked_until = time.time() + 3600
+            log.info("Meaning check: skipped — Google is rate-limiting, next try in an hour")
+            return None
+        if r.status_code != 200:
+            log.info("Meaning check: skipped — Google returned HTTP %s", r.status_code)
+            return None
+        try:
+            lines = "".join(seg[0] for seg in (r.json()[0] or []) if seg and seg[0]).split("\n")
+        except (ValueError, IndexError, TypeError):
+            log.info("Meaning check: skipped — unexpected reply from Google")
+            return None
+        if len(lines) == len(batch):  # otherwise the lines can't be paired; leave them out
+            done.update(zip(batch, lines))
+        i += len(batch)
+        time.sleep(1)
+    return [done.get(t, "") for t in texts]
+
+
+def _meaning_tokens(text):
+    s = text.casefold()
+    if _NO_SPACES.search(s):  # no word spaces: compare character pairs
+        chars = re.sub(r"\W", "", s)
+        return {chars[k:k + 2] for k in range(len(chars) - 1)}
+    return {w[:5] for w in re.findall(r"\w+", s) if len(w) >= 3 and not w.isdigit()}
+
+
+def find_meaning_shifts(src_texts, back_texts, width=4, margin=0.6, min_lines=3, hits=2):
+    """Ranges where back-translated lines match the neighbouring source line instead of
+    their own. Words are weighted by how rare they are in this film's source lines, so
+    no per-language stop-word list is needed."""
+    src_tok = [_meaning_tokens(t) for t in src_texts]
+    df = {}
+    for toks in src_tok:
+        for t in toks:
+            df[t] = df.get(t, 0) + 1
+    n = len(src_texts)
+    idf = {t: math.log((n + 1) / (c + 1)) for t, c in df.items()}
+    back_tok = [_meaning_tokens(t) for t in back_texts]
+
+    def sim(a, b):
+        if not a or not b:
+            return None
+        w = lambda toks: sum(idf.get(t, 5.0) for t in toks)
+        d = min(w(a), w(b))
+        return w(a & b) / d if d > 0 else None
+
+    bad = set()
+    for i in range(1, n - width):
+        own = ahead = behind = 0.0
+        counted = hit_a = hit_b = 0
+        for j in range(i, i + width):
+            o = sim(back_tok[j], src_tok[j])
+            if o is None:
+                continue
+            a = (sim(back_tok[j], src_tok[j + 1]) if j + 1 < n else None) or 0
+            b = sim(back_tok[j], src_tok[j - 1]) or 0
+            own, ahead, behind, counted = own + o, ahead + a, behind + b, counted + 1
+            hit_a += a >= 0.5 and a > o
+            hit_b += b >= 0.5 and b > o
+        if counted >= min_lines and max(ahead, behind) > own + margin and max(hit_a, hit_b) >= hits:
+            bad.update(range(i, i + width))
+    return _ranges(bad)
+
+
+def _ranges(indices):
+    out = []
+    for j in sorted(indices):
+        if out and j <= out[-1][1] + 2:
+            out[-1][1] = j
         else:
-            windows.append([j, j])
-    return [tuple(w) for w in windows]
+            out.append([j, j])
+    return [tuple(w) for w in out]
 
 
-def _repair_shifts(src_entries, trl_map, src_lang, tgt_lang, cfg, tmp, usage, fails, model_calls):
+def _repair_shifts(src_entries, trl_map, src_lang, tgt_lang, cfg, tmp, usage, fails, model_calls,
+                   src_code="", tgt_code=""):
     """Re-translate stretches that came back shifted by one line. A new version is
     kept only when it has the right count and no longer looks shifted."""
     nums = [num for num, _, _ in src_entries if num in trl_map]
     by_num = {num: (num, tc, text) for num, tc, text in src_entries}
     src_texts = ["\n".join(by_num[n][2]) for n in nums]
-    windows = find_shifted_windows(src_texts, ["\n".join(trl_map[n]) for n in nums])
+    trl_texts = ["\n".join(trl_map[n]) for n in nums]
+    found = {j for a, b in find_shifted_windows(src_texts, trl_texts) for j in range(a, b + 1)}
+    meaning = bool(cfg.get("translation", {}).get("meaning_check", True))
+    if meaning:
+        back = _backtranslate([_one_line(t) for t in trl_texts], tgt_code, src_code, cfg)
+        meaning = back is not None
+        if meaning:
+            extra = find_meaning_shifts([_one_line(t) for t in src_texts], back)
+            log.info("Meaning check: %s stretch(es) read like a neighbouring line", len(extra))
+            found |= {j for a, b in extra for j in range(a, b + 1)}
+    windows = _ranges(found)
     if not windows:
         return
     # Each stretch is sent with context on both sides: a short chunk loses who is
@@ -1327,8 +1460,15 @@ def _repair_shifts(src_entries, trl_map, src_lang, tgt_lang, cfg, tmp, usage, fa
             old_cost = sum(_align_cost(s, t) for s, t in zip(part_src, old_texts))
             new_cost = sum(_align_cost(s, t) for s, t in zip(part_src, new_texts))
             # Don't trade a shift for a reply that dropped the end punctuation.
-            if (not find_shifted_windows(part_src, new_texts) and new_cost < old_cost
-                    and _ends_punctuated(new_texts) >= _ends_punctuated(old_texts) - 0.1):
+            ok = (not find_shifted_windows(part_src, new_texts)
+                  and _ends_punctuated(new_texts) >= _ends_punctuated(old_texts) - 0.1)
+            if ok:
+                back = _backtranslate([_one_line(t) for t in new_texts], tgt_code, src_code, cfg) if meaning else None
+                if back is not None:  # judge by meaning when we can …
+                    ok = not find_meaning_shifts([_one_line(t) for t in part_src], back)
+                else:                 # … otherwise the new lines must at least fit better
+                    ok = new_cost < old_cost
+            if ok:
                 for (num, _, _), (_, _, r_text) in zip(part, returned):
                     if r_text:
                         trl_map[num] = _dedup_echoed_lines(r_text)
@@ -1453,7 +1593,8 @@ def translate_file(file_path, cfg, force=False, usage=None, fails=None):
         trl_map, used_model, src_entries, model_calls = _translate_all(
             srt_to_send, src_lang, target_lang, cfg, tmp, usage, fails)
         if used_model and used_model not in MT_PROVIDERS:
-            _repair_shifts(src_entries, trl_map, src_lang, target_lang, cfg, tmp, usage, fails, model_calls)
+            _repair_shifts(src_entries, trl_map, src_lang, target_lang, cfg, tmp, usage, fails, model_calls,
+                           src_code=src_lang_code, tgt_code=target_code)
 
         merged_srt = os.path.join(tmp, "merged.srt")
         missing = 0
