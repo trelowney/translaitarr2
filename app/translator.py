@@ -8,8 +8,10 @@ adaptive-batch loop: shrink the batch on truncation/quality failure, fall back
 through the configured model list on rate limits, and never discard entries that
 already translated cleanly.
 """
+import difflib
 import json
 import logging
+import math
 import os
 import re
 import shutil
@@ -760,6 +762,9 @@ _LOCKED_RULES = (
     "\n\nCRITICAL FORMATTING RULES - never violate:\n"
     "- Return ONLY raw SRT. No explanation, no markdown, no code fences.\n"
     "- NEVER skip, merge, split or reorder any subtitle entry.\n"
+    "- Each entry's text must translate only that entry's source text. When a sentence\n"
+    "  continues into the next entry, keep each part in its own entry, even if the word\n"
+    "  order becomes slightly less natural. Never move words into a neighbouring entry.\n"
     "- Keep every NUMBER line unchanged.\n"
     "- Keep every TIMECODE line unchanged, character for character.\n"
     "- Keep every blank separator line unchanged.\n"
@@ -1148,6 +1153,142 @@ def _translate_all(srt_path, src_lang, tgt_lang, cfg, tmp, usage, fails):
     return trl_map, used_model, src_entries, model_calls
 
 
+# ── Shift repair ──────────────────────────────────────────────────────────────
+# An LLM sometimes moves the end of a sentence into the next entry (word order differs
+# between languages) and then splits a later entry to keep the count right. The count
+# check passes, but every line in between shows one subtitle early or late. These
+# helpers find such runs by comparing each translated line with its own source line and
+# with the neighbouring ones, and translate just that stretch again.
+
+_NAME_STOP = {"Okay", "Yeah", "What", "This", "That", "There", "They", "Then", "When",
+              "Well", "Just", "Look", "Come", "Please", "Sorry", "Thank", "Thanks", "Wait"}
+
+
+def _plain(text):
+    return re.sub(r"<[^>]+>|\{[^}]*\}|\[[^\]]*\]|\([^)]*\)|♪", "", text).strip()
+
+
+def _ends_punctuated(texts):
+    """Share of lines that end with punctuation (some replies come back without it)."""
+    return sum(bool(re.search(r"[.!?…,:;\"“”'-]\W*$", t)) for t in texts) / len(texts)
+
+
+def _cue_features(text):
+    s = _plain(text)
+    return {
+        "n": len(re.sub(r"\W", "", s)),
+        "q": "?" in s,
+        "end": s.rstrip().endswith(("...", "…")),
+        "start": s.lstrip("- ").startswith(("...", "…")),
+        "names": [w for w in re.findall(r"(?<![.!?\n-]\s)(?<!^)\b([A-Z][a-z]{3,})", s)
+                  if w not in _NAME_STOP],
+        "words": re.findall(r"\w+", s),
+    }
+
+
+def _align_cost(src, trl):
+    """How badly a translated line fits a source line (0 = plausible match)."""
+    a, b = _cue_features(src), _cue_features(trl)
+    cost = abs(math.log((b["n"] + 4) / (a["n"] + 4)))
+    cost += 1.0 * (a["q"] != b["q"]) + 0.6 * (a["end"] != b["end"]) + 0.6 * (a["start"] != b["start"])
+    if any(not any(w.startswith(nm[:4]) for w in b["words"]) for nm in a["names"]):
+        cost += 0.5
+    return cost
+
+
+def _scan_shifts(src_texts, trl_texts, width, ratio, floor):
+    n = len(trl_texts)
+    bad = set()
+    for i in range(1, n - width):
+        here = sum(_align_cost(src_texts[j], trl_texts[j]) for j in range(i, i + width))
+        if here / width < floor:
+            continue
+        ahead = sum(_align_cost(src_texts[j + 1], trl_texts[j]) for j in range(i, min(i + width, n - 1)))
+        behind = sum(_align_cost(src_texts[j - 1], trl_texts[j]) for j in range(i, i + width))
+        if min(ahead, behind) < ratio * here:
+            bad.update(range(i, i + width))
+    return bad
+
+
+def find_shifted_windows(src_texts, trl_texts):
+    """Index ranges [(start, end)] where the translation reads like the source one
+    line earlier or later. Three signals: a longer run that fits the neighbouring
+    lines better, a short run that fits them much better, and the same (non-trivial)
+    translated line twice in a row where the source lines differ — the model filling
+    the gap it made by merging. Tuned on real shifted films with no hits on clean ones."""
+    bad = _scan_shifts(src_texts, trl_texts, 5, 0.55, 0.7)
+    bad |= _scan_shifts(src_texts, trl_texts, 3, 0.4, 0.9)
+    for j in range(len(trl_texts) - 1):
+        a, b = _plain(trl_texts[j]), _plain(trl_texts[j + 1])
+        if len(a) >= 12 and a == b and difflib.SequenceMatcher(
+                None, _plain(src_texts[j]).lower(), _plain(src_texts[j + 1]).lower()).ratio() < 0.6:
+            bad.update((j, j + 1))
+    windows = []
+    for j in sorted(bad):
+        if windows and j <= windows[-1][1] + 2:
+            windows[-1][1] = j
+        else:
+            windows.append([j, j])
+    return [tuple(w) for w in windows]
+
+
+def _repair_shifts(src_entries, trl_map, src_lang, tgt_lang, cfg, tmp, usage, fails, model_calls):
+    """Re-translate stretches that came back shifted by one line. A new version is
+    kept only when it has the right count and no longer looks shifted."""
+    nums = [num for num, _, _ in src_entries if num in trl_map]
+    by_num = {num: (num, tc, text) for num, tc, text in src_entries}
+    src_texts = ["\n".join(by_num[n][2]) for n in nums]
+    windows = find_shifted_windows(src_texts, ["\n".join(trl_map[n]) for n in nums])
+    if not windows:
+        return
+    # Each stretch is sent with context on both sides: a short chunk loses who is
+    # speaking (gender etc.). Stretches close together go as one chunk, up to a size
+    # where the model starts drifting again. Retries use less context.
+    cores = []
+    for a, b in windows:
+        if cores and a - 25 <= cores[-1][1] + 25 and b - cores[-1][0] + 50 <= 120:
+            cores[-1][1] = b
+        else:
+            cores.append([a, b])
+    log.info("Shift check: %s stretch(es) look shifted by a line — re-translating", len(cores))
+    for k, (ca, cb) in enumerate(cores[:10]):
+        fixed = False
+        for attempt, pad in enumerate((25, 12, 5), start=1):
+            a, b = max(0, ca - pad), min(len(nums) - 1, cb + pad)
+            part = [by_num[n] for n in nums[a:b + 1]]
+            part_src = src_texts[a:b + 1]
+            old_texts = ["\n".join(trl_map[n]) for n in nums[a:b + 1]]  # earlier fixes may overlap
+            chunk_path = os.path.join(tmp, f"shift_{k}_{attempt}.srt")
+            with open(chunk_path, "w", encoding="utf-8") as f:
+                for num, tc, text in part:
+                    f.write(f"{num}\n{tc}\n" + "\n".join(text) + "\n\n")
+            try:
+                text, model, _ = call_with_fallback(chunk_path, src_lang, tgt_lang, cfg, usage, fails)
+            except (GeminiError, AllModelsExhaustedError) as e:
+                log.warning("Shift check: re-translation failed (%s)", e)
+                break
+            model_calls[model] = model_calls.get(model, 0) + 1
+            out_path = chunk_path.replace(".srt", ".out.srt")
+            with open(out_path, "w", encoding="utf-8") as f:
+                f.write(text)
+            returned = parse_srt(out_path)
+            if len(returned) != len(part):
+                continue
+            new_texts = ["\n".join(t) for _, _, t in returned]
+            old_cost = sum(_align_cost(s, t) for s, t in zip(part_src, old_texts))
+            new_cost = sum(_align_cost(s, t) for s, t in zip(part_src, new_texts))
+            # Don't trade a shift for a reply that dropped the end punctuation.
+            if (not find_shifted_windows(part_src, new_texts) and new_cost < old_cost
+                    and _ends_punctuated(new_texts) >= _ends_punctuated(old_texts) - 0.1):
+                for (num, _, _), (_, _, r_text) in zip(part, returned):
+                    if r_text:
+                        trl_map[num] = _dedup_echoed_lines(r_text)
+                fixed = True
+                break
+        log.info("Shift check: lines %s–%s (%s) %s", part[0][0], part[-1][0],
+                 part[0][1].split(" --> ")[0], "fixed" if fixed else "left as is")
+
+
 # ── Credit line ───────────────────────────────────────────────────────────────
 
 def _tc_to_ms(tc):
@@ -1262,6 +1403,8 @@ def translate_file(file_path, cfg, force=False, usage=None, fails=None):
 
         trl_map, used_model, src_entries, model_calls = _translate_all(
             srt_to_send, src_lang, target_lang, cfg, tmp, usage, fails)
+        if used_model and used_model not in MT_PROVIDERS:
+            _repair_shifts(src_entries, trl_map, src_lang, target_lang, cfg, tmp, usage, fails, model_calls)
 
         merged_srt = os.path.join(tmp, "merged.srt")
         missing = 0
