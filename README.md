@@ -77,8 +77,22 @@ translAItarr2 handles those cases:
   flags only genuinely wrong / untranslated lines; run it automatically or on demand.
   When something is flagged, the Queue shows the exact source → translation pairs so
   you can judge for yourself.
+- **Lines stay in sync** — a model sometimes moves half a sentence into the next subtitle
+  and then splits or repeats a later line to keep the count, so everything in between shows
+  one subtitle early or late. Every translation is checked for that (line length, question
+  marks, ellipses, names, repeated lines), and a stretch that slipped is translated again
+  with context on both sides; the new version is kept only if it lines up. An optional
+  **meaning check** goes further: it translates the result back to the source language
+  (free Google Translate or your own AI provider) and compares it line by line, which also
+  catches shifts where the moved lines happen to be the same length. It works for any
+  language pair. See [Line alignment](#line-alignment).
+- **Clean OCR of Blu-ray subtitles** — PGS tracks are extracted with `mkvextract` and put
+  back in time order before OCR, so lines are never lost to broken timings, and music notes
+  that OCR reads as letters (`A`, `f`, `J`, `¢`, `~`) are turned back into `♪`.
 - **Quality options** — SDH/caption stripping, output sanity validation (drops junk
-  cues), and a credit line on every file.
+  cues), and a credit line on every file. Stray cue numbers inside the text, a UTF-8 BOM
+  in the source and subtitles left with only formatting tags after SDH removal are
+  cleaned up automatically.
 - **Live queue** — jobs, today's per-model usage, **per-provider usage where available**
   (DeepL characters left, OpenRouter credit), outcome tallies, container CPU/RAM and a live
   log, all auto-refreshing; Settings auto-save (no Save button).
@@ -201,6 +215,25 @@ every field. Highlights:
 | Notifications | Any number of notifications, each with its own service and events.   |
 | Translation | Timeout, retries, context window, optional translator credit line.      |
 | Validation  | Min/max cue length and duration sanity checks on the output.            |
+| Line alignment | Meaning check after translating: Off (default), Free Google Translate, or your AI provider. See [Line alignment](#line-alignment). |
+
+### Line alignment
+
+Every translation is checked for lines that slipped by one subtitle, and any stretch that
+did is translated again. That part is always on and uses no extra requests unless it finds
+something. **Settings → Translation → "Check that lines didn't slip by one"** adds a
+meaning check on top:
+
+| Option | How it checks | Cost |
+|---|---|---|
+| **Off** (default) | Line length, question marks, ellipses, names and repeated lines only. | None |
+| **Free Google Translate** | Translates the result back to the source language with the keyless Google endpoint and compares the words line by line. | No AI requests. Sends the subtitle text to Google. Google rate-limits heavy use; the check is then skipped for an hour and the translation finishes without it. |
+| **AI provider** | Same comparison, but the back-translation comes from your translation providers (fallbacks and daily limits apply). | About one extra request per batch, plus one per re-translated stretch. |
+
+The comparison weighs words by how rare they are in that film, so it needs no word lists and
+works for any source and target language, including scripts without spaces between words.
+If the back-translation fails for any reason, the check is skipped and the translation is
+saved as usual.
 
 ### Translation providers
 
@@ -374,12 +407,16 @@ hand-placed `.srt` files are never touched.
 ## Requirements for OCR
 
 PGS OCR uses Tesseract (CPU-only) via [`pgsrip`](https://github.com/ratoaq2/pgsrip).
-Language data for English, French, German, and Spanish ships in the image.
+Language data for English, French, German, and Spanish ships in the image. Tracks inside an
+MKV are extracted with `mkvextract` (MKVToolNix, also in the image), which keeps the original
+timings; other containers fall back to ffmpeg.
 
 ## Privacy & telemetry
 
 translAItarr2 keeps your data on your server. Your API keys live only in the mounted
-`config/` volume and are redacted from logs and the status page.
+`config/` volume and are redacted from logs and the status page. Subtitle text goes only to
+the translation engines you configure, and to Google if you pick **Free Google Translate**
+for the [line alignment](#line-alignment) check (off by default).
 
 The **one** exception is an **anonymous active-instance counter**, so the project can see
 roughly how many instances are out there. It is **on by default** but **opt-out** — a single
