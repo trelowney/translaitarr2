@@ -102,6 +102,7 @@
     "source_preference": "video",
     "verify": false,
     "verify_samples": 8,
+    "meaning_check": "off",
     "cleanup_superseded": true
   },
 

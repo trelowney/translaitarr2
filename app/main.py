@@ -1017,7 +1017,8 @@ def settings_save():
         cfg["translation"]["source_preference"] = f["source_preference"]
     cfg["translation"]["verify"] = f.get("verify_enabled") == "on"
     cfg["translation"]["verify_samples"] = _int(f.get("verify_samples"), cfg["translation"]["verify_samples"])
-    cfg["translation"]["meaning_check"] = f.get("meaning_check") == "on"
+    if f.get("meaning_check") in ("off", "google", "ai"):
+        cfg["translation"]["meaning_check"] = f["meaning_check"]
     cfg["translation"]["cleanup_superseded"] = f.get("cleanup_superseded") == "on"
     if f.get("formality") in ("auto", "formal", "informal"):
         cfg["translation"]["formality"] = f["formality"]
