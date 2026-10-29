@@ -1278,7 +1278,8 @@ def find_shifted_windows(src_texts, trl_texts):
 # Back-translation ("meaning check"): the surface signals above miss a shift when the
 # moved lines have similar length and no question marks or names. Translating the result
 # back to the source language shows which source line each translated line really says.
-# Uses the keyless Google endpoint; quality is irrelevant, only shared words count.
+# Engine per setting: the keyless Google endpoint or the AI providers. Translation quality
+# barely matters here, only shared words count.
 _ISO2 = {"eng": "en", "cze": "cs", "ces": "cs", "slo": "sk", "slk": "sk", "fre": "fr", "fra": "fr",
          "ger": "de", "deu": "de", "spa": "es", "ita": "it", "por": "pt", "pol": "pl", "dut": "nl",
          "nld": "nl", "rus": "ru", "ukr": "uk", "hun": "hu", "rum": "ro", "ron": "ro", "bul": "bg",
@@ -1347,6 +1348,44 @@ def _backtranslate(texts, from_code, to_code, cfg):
     return [done.get(t, "") for t in texts]
 
 
+def _backtranslate_ai(texts, from_lang, to_lang, cfg, tmp, usage, fails, model_calls):
+    """Translate texts back with the configured AI providers, a batch per request, using
+    the same path (and daily limits) as translation. Lines of a batch that comes back
+    with the wrong count are left empty. Returns None when nothing could be done."""
+    if not provider_chain(cfg):
+        return None
+    out, ok = [""] * len(texts), False
+    for k in range(0, len(texts), 250):
+        part = texts[k:k + 250]
+        path = os.path.join(tmp, f"back_{k}.srt")
+        with open(path, "w", encoding="utf-8") as f:
+            for i, t in enumerate(part, start=1):
+                f.write(f"{i}\n{_ms_to_tc(i * 2000)} --> {_ms_to_tc(i * 2000 + 1500)}\n{t or '...'}\n\n")
+        try:
+            text, model, _ = call_with_fallback(path, from_lang, to_lang, cfg, usage, fails)
+        except (GeminiError, AllModelsExhaustedError) as e:
+            log.info("Meaning check: back-translation failed (%s)", e)
+            continue
+        model_calls[model] = model_calls.get(model, 0) + 1
+        with open(path + ".out", "w", encoding="utf-8") as f:
+            f.write(text)
+        returned = parse_srt(path + ".out")
+        if len(returned) == len(part):
+            out[k:k + len(part)] = [_one_line("\n".join(t)) for _, _, t in returned]
+            ok = True
+    return out if ok else None
+
+
+def _back(lines, mode, langs, cfg, tmp, usage, fails, model_calls):
+    """Back-translate translated lines to the source language with the chosen engine."""
+    src_code, tgt_code, src_lang, tgt_lang = langs
+    if mode == "google":
+        return _backtranslate(lines, tgt_code, src_code, cfg)
+    if mode == "ai":
+        return _backtranslate_ai(lines, tgt_lang, src_lang, cfg, tmp, usage, fails, model_calls)
+    return None
+
+
 def _meaning_tokens(text):
     s = text.casefold()
     if _NO_SPACES.search(s):  # no word spaces: compare character pairs
@@ -1412,9 +1451,11 @@ def _repair_shifts(src_entries, trl_map, src_lang, tgt_lang, cfg, tmp, usage, fa
     src_texts = ["\n".join(by_num[n][2]) for n in nums]
     trl_texts = ["\n".join(trl_map[n]) for n in nums]
     found = {j for a, b in find_shifted_windows(src_texts, trl_texts) for j in range(a, b + 1)}
-    meaning = bool(cfg.get("translation", {}).get("meaning_check", True))
+    mode = cfg.get("translation", {}).get("meaning_check", "off")
+    langs = (src_code, tgt_code, src_lang, tgt_lang)
+    meaning = mode in ("google", "ai")
     if meaning:
-        back = _backtranslate([_one_line(t) for t in trl_texts], tgt_code, src_code, cfg)
+        back = _back([_one_line(t) for t in trl_texts], mode, langs, cfg, tmp, usage, fails, model_calls)
         meaning = back is not None
         if meaning:
             extra = find_meaning_shifts([_one_line(t) for t in src_texts], back)
@@ -1463,7 +1504,8 @@ def _repair_shifts(src_entries, trl_map, src_lang, tgt_lang, cfg, tmp, usage, fa
             ok = (not find_shifted_windows(part_src, new_texts)
                   and _ends_punctuated(new_texts) >= _ends_punctuated(old_texts) - 0.1)
             if ok:
-                back = _backtranslate([_one_line(t) for t in new_texts], tgt_code, src_code, cfg) if meaning else None
+                back = (_back([_one_line(t) for t in new_texts], mode, langs, cfg, tmp, usage, fails, model_calls)
+                        if meaning else None)
                 if back is not None:  # judge by meaning when we can …
                     ok = not find_meaning_shifts([_one_line(t) for t in part_src], back)
                 else:                 # … otherwise the new lines must at least fit better

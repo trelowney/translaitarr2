@@ -187,10 +187,10 @@ DEFAULTS = {
         # language and flag dubious jobs. Costs one extra request per job.
         "verify": False,
         "verify_samples": 8,
-        # After translating, back-translate the result with the free Google endpoint
-        # and re-translate stretches whose lines slipped by one. Skipped when Google
-        # is unavailable or rate-limiting.
-        "meaning_check": True,
+        # After translating, translate the result back to the source language and
+        # re-translate stretches whose lines slipped by one: "off", "google" (free
+        # keyless endpoint, may be rate-limited) or "ai" (the translation providers).
+        "meaning_check": "off",
         # When a release is upgraded and the new file already carries the target
         # language (embedded audio or subtitle), delete the now-stale sidecar we
         # translated earlier. Only ever removes subtitles translAItarr2 created.
@@ -301,6 +301,8 @@ def load_config():
         cfg.setdefault(p, {}).setdefault("prompt", "")
         cfg[p].setdefault("glossary", "")
     cfg.setdefault("translation", {}).setdefault("formality", "auto")
+    if cfg["translation"].get("meaning_check") not in ("off", "google", "ai"):
+        cfg["translation"]["meaning_check"] = "off"
     # Dashboard API key (added in 0.1.10). Older configs get it from DEFAULTS via the
     # merge; this only repairs a hand-edited value of the wrong type.
     if not isinstance(cfg.get("api"), dict):
