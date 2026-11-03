@@ -302,7 +302,7 @@ def outcome_counts():
             out["errors"] += 1
         elif (r["result"] or "").startswith("skipped"):
             out["skipped"] += 1
-        elif r["result"] == "translated":
+        elif (r["result"] or "").startswith("translated"):  # "translated · verify …"
             out["translated"] += 1
     return out
 
