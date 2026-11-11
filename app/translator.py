@@ -1455,6 +1455,7 @@ def _repair_shifts(src_entries, trl_map, src_lang, tgt_lang, cfg, tmp, usage, fa
     langs = (src_code, tgt_code, src_lang, tgt_lang)
     meaning = mode in ("google", "ai")
     if meaning:
+        log.info("Meaning check: back-translating %s lines to compare with the source", len(trl_texts))
         back = _back([_one_line(t) for t in trl_texts], mode, langs, cfg, tmp, usage, fails, model_calls)
         meaning = back is not None
         if meaning:
@@ -1476,10 +1477,13 @@ def _repair_shifts(src_entries, trl_map, src_lang, tgt_lang, cfg, tmp, usage, fa
     log.info("Shift check: %s stretch(es) look shifted by a line — re-translating", len(cores))
     for k, (ca, cb) in enumerate(cores[:10]):
         fixed = False
+        why = []  # one reason per rejected attempt, logged when the stretch is left as is
         for attempt, pad in enumerate((25, 12, 5), start=1):
             a, b = max(0, ca - pad), min(len(nums) - 1, cb + pad)
             part = [by_num[n] for n in nums[a:b + 1]]
             part_src = src_texts[a:b + 1]
+            log.info("Shift check: re-translating lines %s–%s (%s), attempt %s/3", part[0][0], part[-1][0],
+                     part[0][1].split(" --> ")[0], attempt)
             old_texts = ["\n".join(trl_map[n]) for n in nums[a:b + 1]]  # earlier fixes may overlap
             chunk_path = os.path.join(tmp, f"shift_{k}_{attempt}.srt")
             with open(chunk_path, "w", encoding="utf-8") as f:
@@ -1489,6 +1493,7 @@ def _repair_shifts(src_entries, trl_map, src_lang, tgt_lang, cfg, tmp, usage, fa
                 text, model, _ = call_with_fallback(chunk_path, src_lang, tgt_lang, cfg, usage, fails)
             except (GeminiError, AllModelsExhaustedError) as e:
                 log.warning("Shift check: re-translation failed (%s)", e)
+                why.append(f"{attempt}: request failed")
                 break
             model_calls[model] = model_calls.get(model, 0) + 1
             out_path = chunk_path.replace(".srt", ".out.srt")
@@ -1496,20 +1501,30 @@ def _repair_shifts(src_entries, trl_map, src_lang, tgt_lang, cfg, tmp, usage, fa
                 f.write(text)
             returned = parse_srt(out_path)
             if len(returned) != len(part):
+                why.append(f"{attempt}: got {len(returned)} of {len(part)} lines")
                 continue
             new_texts = ["\n".join(t) for _, _, t in returned]
             old_cost = sum(_align_cost(s, t) for s, t in zip(part_src, old_texts))
             new_cost = sum(_align_cost(s, t) for s, t in zip(part_src, new_texts))
             # Don't trade a shift for a reply that dropped the end punctuation.
-            ok = (not find_shifted_windows(part_src, new_texts)
-                  and _ends_punctuated(new_texts) >= _ends_punctuated(old_texts) - 0.1)
-            if ok:
+            ok = False
+            if find_shifted_windows(part_src, new_texts):
+                why.append(f"{attempt}: still shifted")
+            elif _ends_punctuated(new_texts) < _ends_punctuated(old_texts) - 0.1:
+                why.append(f"{attempt}: lost end punctuation")
+            else:
+                if meaning:
+                    log.info("Shift check: back-translating the new version to check its meaning")
                 back = (_back([_one_line(t) for t in new_texts], mode, langs, cfg, tmp, usage, fails, model_calls)
                         if meaning else None)
                 if back is not None:  # judge by meaning when we can …
                     ok = not find_meaning_shifts([_one_line(t) for t in part_src], back)
+                    if not ok:
+                        why.append(f"{attempt}: still reads like a neighbouring line")
                 else:                 # … otherwise the new lines must at least fit better
                     ok = new_cost < old_cost
+                    if not ok:
+                        why.append(f"{attempt}: fits no better than before")
             if ok:
                 for (num, _, _), (_, _, r_text) in zip(part, returned):
                     if r_text:
@@ -1517,7 +1532,8 @@ def _repair_shifts(src_entries, trl_map, src_lang, tgt_lang, cfg, tmp, usage, fa
                 fixed = True
                 break
         log.info("Shift check: lines %s–%s (%s) %s", part[0][0], part[-1][0],
-                 part[0][1].split(" --> ")[0], "fixed" if fixed else "left as is")
+                 part[0][1].split(" --> ")[0],
+                 "fixed" if fixed else "left as is" + (f" ({'; '.join(why)})" if why else ""))
 
 
 # ── Credit line ───────────────────────────────────────────────────────────────
@@ -1707,6 +1723,7 @@ def verify_translation(video_path, cfg, usage=None):
     if src is None:
         return {"ok": False, "note": "no source to compare against"}, {}
     src_lang = LANG_NAMES.get(src["lang"], src["lang"].upper())
+    log.info("Verify: checking the %s translation against the %s source", target_lang, src_lang)
 
     with tempfile.TemporaryDirectory(prefix="verify_") as tmp:
         src_srt = os.path.join(tmp, "src.srt")
