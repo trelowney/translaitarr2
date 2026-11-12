@@ -1,6 +1,7 @@
 {
   "_comment": "Copy nothing manually — this file documents the shape of config/config.json, which the first-run setup wizard creates for you. Secrets stay in config/ and are never committed.",
 
+  "defaults_version": 2,
   "onboarding_completed": false,
 
   "auth": {
@@ -19,6 +20,8 @@
     "models": [
       "gemini-3.1-flash-lite",
       "gemini-3.5-flash-lite",
+      "gemini-4-hydrogen",
+      "gemini-3.8-flash",
       "gemini-3.7-flash",
       "gemini-3.6-flash",
       "gemini-3.5-flash",
@@ -27,18 +30,24 @@
       "gemini-flash-latest",
       "gemini-2.5-flash-lite",
       "gemini-flash-lite-latest",
-      "gemini-3.8-flash"
+      "gemini-3.1-flash-lite-preview"
     ],
-    "model_batch": {
-      "gemini-3.8-flash": 200,
-      "gemini-3.7-flash": 200,
-      "gemini-3.6-flash": 200,
-      "gemini-3.5-flash": 200,
-      "gemini-3-flash-preview": 200,
-      "gemini-2.5-flash": 200,
-      "gemini-flash-latest": 200
-    },
-    "model_daily_limit": {}
+    "model_batch": {},
+    "model_daily_limit": {
+      "gemini-3.1-flash-lite": 480,
+      "gemini-3.5-flash-lite": 480,
+      "gemini-4-hydrogen": 18,
+      "gemini-3.8-flash": 18,
+      "gemini-3.7-flash": 18,
+      "gemini-3.6-flash": 18,
+      "gemini-3.5-flash": 18,
+      "gemini-3-flash-preview": 18,
+      "gemini-2.5-flash": 18,
+      "gemini-flash-latest": 18,
+      "gemini-2.5-flash-lite": 18,
+      "gemini-flash-lite-latest": 18,
+      "gemini-3.1-flash-lite-preview": 18
+    }
   },
 
   "_providers_comment": "AI provider priority: primary first, then secondary, then tertiary ('none' to skip). Each provider below is configured in Settings → AI providers. LLM providers take an api_key + a models list (with optional per-model batch/daily-limit); MT engines need only a key or URL.",
@@ -98,7 +107,7 @@
     "context_before": 2,
     "context_after": 2,
     "add_translator_credit": false,
-    "batch_size": 150,
+    "batch_size": 250,
     "source_preference": "video",
     "verify": false,
     "verify_samples": 8,

@@ -1090,7 +1090,7 @@ def call_with_fallback(srt_path, src_lang, tgt_lang, cfg, usage, fails):
 
 def _batch_cap(provider, model, cfg):
     overrides = cfg.get(provider, {}).get("model_batch", {})
-    return overrides.get(model) or cfg["translation"].get("batch_size", 150)
+    return overrides.get(model) or cfg["translation"].get("batch_size", 250)
 
 
 def _dedup_echoed_lines(lines):
@@ -1136,7 +1136,7 @@ def _translate_all(srt_path, src_lang, tgt_lang, cfg, tmp, usage, fails):
         batch_cap = _batch_cap(chain[0][0], chain[0][1][0], cfg)
         preferred = chain[0][1][0]
     else:
-        preferred, batch_cap = None, cfg["translation"].get("batch_size", 150)
+        preferred, batch_cap = None, cfg["translation"].get("batch_size", 250)
     log.info("Batch cap: %s (preferred: %s)", batch_cap, preferred)
     send_count = min(len(remaining), batch_cap)
     max_attempts = max(30, len(src_entries) // 50 * 2)

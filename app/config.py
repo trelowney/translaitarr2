@@ -38,6 +38,11 @@ SECRET_PATHS = (
 )
 
 DEFAULTS = {
+    # Which set of built-in defaults this config was created with. 1 = up to
+    # 0.1.17, 2 = the 0.1.18 Gemini chain. Files without it are version 1 and keep
+    # the old defaults for good (see load_config), so an update never changes the
+    # settings of an existing install.
+    "defaults_version": 2,
     "onboarding_completed": False,
     "auth": {"enabled": False, "password_hash": "", "session_days": 30},
     "arr": {
@@ -46,13 +51,15 @@ DEFAULTS = {
     },
     "gemini": {
         "api_key": "",
-        # Flash-family fallback order (lite models first — they carry the biggest
-        # free-tier daily quota, the full flashes are the fallback). On the free tier
-        # each model has its own daily quota, so the worker simply skips any that
-        # return 429/5xx and tries the next. Paid-only pro models are omitted.
+        # Free-tier fallback order: the two lite models first (they carry by far the
+        # biggest daily quota), then the full flashes, then the remaining lites. On the
+        # free tier each model has its own daily quota, so the worker simply skips any
+        # that return 429/5xx and tries the next. Paid-only pro models are omitted.
         "models": [
             "gemini-3.1-flash-lite",
             "gemini-3.5-flash-lite",
+            "gemini-4-hydrogen",
+            "gemini-3.8-flash",
             "gemini-3.7-flash",
             "gemini-3.6-flash",
             "gemini-3.5-flash",
@@ -61,23 +68,30 @@ DEFAULTS = {
             "gemini-flash-latest",
             "gemini-2.5-flash-lite",
             "gemini-flash-lite-latest",
-            "gemini-3.8-flash",
+            "gemini-3.1-flash-lite-preview",
         ],
         # Per-model batch override (cues per request). Models not listed fall back
-        # to translation.batch_size — that's where the smaller "lite" models land.
-        "model_batch": {
-            "gemini-3.8-flash": 200,
-            "gemini-3.7-flash": 200,
-            "gemini-3.6-flash": 200,
-            "gemini-3.5-flash": 200,
-            "gemini-3-flash-preview": 200,
-            "gemini-2.5-flash": 200,
-            "gemini-flash-latest": 200,
-        },
+        # to translation.batch_size. Note: a job sizes its batches once, from the
+        # first model in the chain; fallback models receive the same batch.
+        "model_batch": {},
         # Per-model daily request cap. Models not listed fall back to
         # limits.max_daily_per_model. The worker skips a model once its count
         # for the day reaches this.
-        "model_daily_limit": {},
+        "model_daily_limit": {
+            "gemini-3.1-flash-lite": 480,
+            "gemini-3.5-flash-lite": 480,
+            "gemini-4-hydrogen": 18,
+            "gemini-3.8-flash": 18,
+            "gemini-3.7-flash": 18,
+            "gemini-3.6-flash": 18,
+            "gemini-3.5-flash": 18,
+            "gemini-3-flash-preview": 18,
+            "gemini-2.5-flash": 18,
+            "gemini-flash-latest": 18,
+            "gemini-2.5-flash-lite": 18,
+            "gemini-flash-lite-latest": 18,
+            "gemini-3.1-flash-lite-preview": 18,
+        },
     },
     # OpenRouter — OpenAI-compatible gateway to many models. Empty by default;
     # models are fetched from its API and chosen in the UI.
@@ -179,7 +193,7 @@ DEFAULTS = {
         "context_before": 2,
         "context_after": 2,
         "add_translator_credit": False,
-        "batch_size": 150,
+        "batch_size": 250,
         # 'video' = translate the subtitle inside the video (embedded/PGS);
         # 'sidecar' = prefer an external source .srt next to it, then fall back.
         "source_preference": "video",
@@ -290,11 +304,40 @@ def _env_value(name):
     return os.environ.get(name)
 
 
+# Defaults that shipped up to 0.1.17. Config files written before 0.1.18 that
+# lack one of these keys fall back to the old value, not the new default.
+_PRE_0_1_18_DEFAULTS = {
+    ("gemini", "models"): [
+        "gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.7-flash",
+        "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3-flash-preview",
+        "gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite",
+        "gemini-flash-lite-latest", "gemini-3.8-flash",
+    ],
+    ("gemini", "model_batch"): {
+        "gemini-3.8-flash": 200, "gemini-3.7-flash": 200, "gemini-3.6-flash": 200,
+        "gemini-3.5-flash": 200, "gemini-3-flash-preview": 200,
+        "gemini-2.5-flash": 200, "gemini-flash-latest": 200,
+    },
+    ("gemini", "model_daily_limit"): {},
+    ("translation", "batch_size"): 150,
+}
+
+
 def load_config():
     cfg = copy.deepcopy(DEFAULTS)
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE) as f:
-            cfg = _deep_merge(cfg, json.load(f))
+            saved = json.load(f)
+        # An existing install keeps the defaults it was set up with: the 0.1.18
+        # Gemini chain/limits/batch defaults apply to NEW installs only. A file
+        # from before 0.1.18 is merged over the old defaults, exactly as before,
+        # and stays marked as version 1 when it is saved again.
+        version = saved.get("defaults_version", 1)
+        if not isinstance(version, int) or version < 2:
+            for path, value in _PRE_0_1_18_DEFAULTS.items():
+                _set_path(cfg, path, copy.deepcopy(value))
+            saved = dict(saved, defaults_version=1)
+        cfg = _deep_merge(cfg, saved)
     # Per-LLM-provider custom prompt + glossary, and the global formality setting
     # (added later; ensure present for older config files). MT engines have no prompt.
     for p in ("gemini", "openrouter", "openai_compat", "anthropic", "cloudflare"):

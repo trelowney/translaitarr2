@@ -277,18 +277,20 @@ your models top-to-bottom, falling back to the next one when a model is rate-lim
 On the **free tier each model has its own small daily request quota** (roughly ~20
 requests/day per model, reset at midnight US-Pacific), so a bigger batch means fewer
 requests and more subtitles per day — but too big risks truncated or lower-quality
-output. Sensible starting points:
+output.
 
-| Model (example)              | Tier | Suggested batch (cues/request) | Notes                                    |
-|------------------------------|------|--------------------------------|------------------------------------------|
-| `gemini-3.x-flash` / `2.5-flash` | free | **~200**                     | Strong; handles large batches well       |
-| `*-flash-lite`               | free | **~150**                       | Faster/cheaper, slightly smaller batches |
-| `*-pro`                      | paid | ~250                           | Best quality; needs a paid key/quota     |
+The default chain starts with `gemini-3.1-flash-lite` and `gemini-3.5-flash-lite`
+(daily limit 480 each, by far the biggest free quota), then `gemini-4-hydrogen` and
+the full flash models (`3.8`, `3.7`, `3.6`, `3.5`, `3-flash-preview`, `2.5`,
+`flash-latest`), then the remaining lites — 18 requests/day each. Paid-only `*-pro`
+models are left out; add them yourself if your key has a paid quota.
 
-Tune the global **`batch_size`** in Settings, and override per model via
-`gemini.model_batch` in config. As a feel: a typical 700–900-cue film translates in
-~4–6 requests at batch 150–200. Google changes quotas often — check your current
-limits in Google AI Studio.
+The default **`batch_size` is 250** cues per request. A job sizes its batches once,
+from the first model in the chain, and fallback models receive the same batch, so
+the global `batch_size` (Settings) is the number that matters; a per-model override
+(`gemini.model_batch` in config) only takes effect for the model at the top of the
+chain. A typical 700–900-cue film translates in ~3–4 requests. Google changes models
+and quotas often — check your current limits in Google AI Studio.
 
 ### Import webhook (optional)
 
